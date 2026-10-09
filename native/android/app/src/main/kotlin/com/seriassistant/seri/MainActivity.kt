@@ -15,12 +15,20 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val channelName = "com.seriassistant.seri/always_on"
     private var seriChannel: MethodChannel? = null
+    private var flutterReady = false
+    private var pendingAssistantInvocation = false
+    private var pendingWakeDetected = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         seriChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
         seriChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "ready" -> {
+                    flutterReady = true
+                    result.success(true)
+                    dispatchPendingInvocation()
+                }
                 "start" -> {
                     try {
                         // Start only while the activity is visible. Android 12+ restricts
@@ -182,9 +190,23 @@ class MainActivity : FlutterActivity() {
         if (!assistantInvoked && !wakeDetected) return
         launchIntent.removeExtra("seri_assistant_invoked")
         launchIntent.removeExtra("seri_wake_detected")
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (assistantInvoked) seriChannel?.invokeMethod("assistantInvoked", null)
-            else if (wakeDetected) seriChannel?.invokeMethod("wakeDetected", null)
-        }, 650)
+        if (assistantInvoked) pendingAssistantInvocation = true
+        if (wakeDetected) pendingWakeDetected = true
+        Handler(Looper.getMainLooper()).postDelayed({ dispatchPendingInvocation() }, 250)
+    }
+
+    private fun dispatchPendingInvocation() {
+        if (!flutterReady || seriChannel == null) return
+        when {
+            pendingAssistantInvocation -> {
+                pendingAssistantInvocation = false
+                pendingWakeDetected = false
+                seriChannel?.invokeMethod("assistantInvoked", null)
+            }
+            pendingWakeDetected -> {
+                pendingWakeDetected = false
+                seriChannel?.invokeMethod("wakeDetected", null)
+            }
+        }
     }
 }
