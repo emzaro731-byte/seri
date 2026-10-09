@@ -3,6 +3,8 @@ package com.seriassistant.seri
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.app.role.RoleManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
@@ -11,10 +13,12 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.seriassistant.seri/always_on"
+    private var seriChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+        seriChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        seriChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
                     try {
@@ -45,5 +49,18 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        notifyIfWakeDetected(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notifyIfWakeDetected(intent)
+    }
+
+    private fun notifyIfWakeDetected(source: Intent?) {
+        if (source?.getBooleanExtra("seri_wake_detected", false) != true) return
+        source.removeExtra("seri_wake_detected")
+        Handler(Looper.getMainLooper()).postDelayed({ seriChannel?.invokeMethod("wakeDetected", null) }, 500)
     }
 }
