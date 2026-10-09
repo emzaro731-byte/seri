@@ -139,9 +139,9 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         if (result.finalResult && _heard.trim().isNotEmpty) {
           final heard = _heard.trim();
           if (_wakeWordMode) {
-            final wake = RegExp(r'\\b(?:hey|hi|hello)\\s+seri\\b', caseSensitive: false).firstMatch(heard);
+            final wake = RegExp(r'\b(?:hey|hi|hello)\s+seri\b', caseSensitive: false).firstMatch(heard);
             if (wake != null) {
-              final command = heard.substring(wake.end).trim().replaceFirst(RegExp(r'^[,.:;\\s]+'), '');
+              final command = heard.substring(wake.end).trim().replaceFirst(RegExp(r'^[,.:;\s]+'), '');
               if (command.isNotEmpty) {
                 _send(command);
               } else {
