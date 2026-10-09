@@ -50,6 +50,12 @@ jobs:
           s = p.read_text()
           if 'android.speech.RecognitionService' not in s:
               s = s.replace('</manifest>', '    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>' + chr(10) + '</manifest>')
+          if 'android.intent.category.LAUNCHER' not in s:
+              launcher_query = '<intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>'
+              if '</queries>' in s:
+                  s = s.replace('</queries>', launcher_query + '</queries>')
+              else:
+                  s = s.replace('</manifest>', '<queries>' + launcher_query + '</queries>' + chr(10) + '</manifest>')
           marker = '<manifest'
           i = s.find('>', s.find(marker))
           permissions = [
