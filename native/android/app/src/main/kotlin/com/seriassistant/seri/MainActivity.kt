@@ -266,7 +266,7 @@ class MainActivity : FlutterActivity() {
 
     private fun callSavedContact(requestedName: String, result: MethodChannel.Result) {
         try {
-            val normalized = requestedName.lowercase().replace(Regex("[^a-z0-9]"), "")
+            val normalized = requestedName.lowercase().replace(Regex("[^a-z0-9]"), "").removePrefix("my")
             val aliases = when (normalized) {
                 "mum", "mom", "mummy", "mommy", "mother" -> setOf("mum", "mom", "mummy", "mommy", "mother", "mama", "mam")
                 "dad", "daddy", "father" -> setOf("dad", "daddy", "father", "papa")
