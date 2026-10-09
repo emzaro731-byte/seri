@@ -450,9 +450,17 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (q.startsWith('call ')) {
       final target = input.trim().substring(5).trim();
       final number = target.replaceAll(RegExp(r'[^0-9+*#,;]'), '');
-      if (number.isEmpty) return 'Please say “call” followed by a phone number. I will open the dialer so you can confirm the call.';
-      await _open('tel:$number');
-      return 'I opened your phone dialer for $number. Review the number and tap call when you are ready.';
+      if (number.isNotEmpty && target.replaceAll(RegExp(r'[0-9+*#,;\\s().-]'), '').isEmpty) {
+        await _open('tel:$number');
+        return 'I opened your phone dialer for $number. Tap call to confirm.';
+      }
+      try {
+        final ok = await _alwaysOnChannel.invokeMethod<bool>('callContact', {'name': target}) ?? false;
+        if (ok) return 'Calling $target now.';
+        return 'I could not find a matching contact for “$target”, or phone/contact permission was denied. Save the person in Contacts and allow Seri to access Contacts and make calls.';
+      } on PlatformException {
+        return 'I could not place that call. Check Seri’s Contacts and Phone permissions.';
+      }
     }
     if (q.startsWith('text ') || q.startsWith('send sms to ')) {
       final raw = input.trim();
