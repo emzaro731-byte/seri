@@ -393,11 +393,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         SizedBox(width: double.infinity, child: FilledButton(onPressed: () async {
           final wasWakeEnabled = _wakeWordMode;
           setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; _wakeWordMode = wakeWord; });
-          _saveSettings();
+          await _saveSettings();
           Navigator.pop(ctx);
           if (_wakeWordMode) {
             if (!_listening) await _listen();
-            await _startWakeService();
           } else if (wasWakeEnabled) {
             await _stopWakeService();
           }
@@ -465,7 +464,24 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       Text(_status, style: const TextStyle(color: cyan, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w700)),
       const SizedBox(height: 5),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(_listening && _heard.isNotEmpty ? _heard : _thinking ? 'Analysing your request...' : 'Your world, one command away.', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12))),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Row(children: [
+          Expanded(child: _glass(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), borderRadius: BorderRadius.circular(14), child: Row(children: [
+            Container(width: 7, height: 7, decoration: BoxDecoration(color: _wakeWordMode ? cyan : Colors.greenAccent, shape: BoxShape.circle, boxShadow: [BoxShadow(color: (_wakeWordMode ? cyan : Colors.greenAccent).withValues(alpha: .45), blurRadius: 8)])),
+            const SizedBox(width: 7),
+            Expanded(child: Text(_wakeWordMode ? 'WAKE SYSTEM ARMED' : 'CORE SYSTEM ONLINE', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.w700))),
+          ]))),
+          const SizedBox(width: 8),
+          _glass(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), borderRadius: BorderRadius.circular(14), child: Row(children: [
+            Icon(_ready ? Icons.mic_none_rounded : Icons.mic_off_outlined, size: 13, color: _ready ? cyan : Colors.orangeAccent),
+            const SizedBox(width: 5),
+            Text(_ready ? 'VOICE READY' : 'VOICE CHECK', style: const TextStyle(fontSize: 9, letterSpacing: .7)),
+          ])),
+        ]),
+      ),
+      const SizedBox(height: 10),
       SizedBox(height: 42, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 14), children: [
         _quickAction(Icons.access_time_rounded, 'Time', 'What time is it?'),
         const SizedBox(width: 8), _quickAction(Icons.language_rounded, 'Search', 'Search for latest technology news'),
