@@ -315,8 +315,82 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
 
   Future<String?> _command(String input) async {
     final q = input.toLowerCase().trim();
-
-    final rememberMatch = RegExp(r'^(?:please\\s+)?remember(?: that)?\\s+(.+)    if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal AI assistant. I can chat, speak replies, search the web, open websites, and help with everyday tasks.';
+    final rememberMatch = RegExp(r'^(?:please\s+)?remember(?: that)?\s+(.+)$', caseSensitive: false).firstMatch(input.trim());
+    if (rememberMatch != null && !q.startsWith('remember what')) {
+      final item = rememberMatch.group(1)!.trim();
+      if (item.isEmpty) return 'Tell me what you would like me to remember.';
+      if (_memories.any((m) => m.toLowerCase() == item.toLowerCase())) return 'I already have that saved in memory.';
+      final updated = [..._memories, item];
+      if (updated.length > 50) updated.removeAt(0);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('seri_memories', updated);
+      if (mounted) setState(() => _memories = updated);
+      return 'I’ll remember that for future conversations: ${item}';
+    }
+    if (q.contains('what do you remember') || q == 'show memory' || q == 'show my memories') {
+      return _memories.isEmpty ? 'I have no saved memories yet. Say “remember that …” to save something for future conversations.' : 'Here is what I remember:\n' + _memories.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n');
+    }
+    if (q == 'forget everything you remember' || q == 'forget all memories' || q == 'clear memory') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('seri_memories');
+      if (mounted) setState(() => _memories = []);
+      return 'I deleted all saved memories from this device.';
+    }
+    if (q.startsWith('forget that ')) {
+      final target = input.trim().substring('forget that '.length).trim();
+      final updated = _memories.where((m) => m.toLowerCase() != target.toLowerCase()).toList();
+      if (updated.length == _memories.length) return 'I couldn’t find that exact memory.';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('seri_memories', updated);
+      if (mounted) setState(() => _memories = updated);
+      return 'I forgot: ${target}';
+    }
+    if (q.startsWith('remind me to ') || q.startsWith('remind me ')) {
+      final task = input.trim().replaceFirst(RegExp(r'^remind me(?: to)?\s+', caseSensitive: false), '');
+      final inMatch = RegExp(r'\bin\s+(\d+)\s*(minutes?|mins?|hours?|hrs?)\b', caseSensitive: false).firstMatch(task);
+      if (inMatch != null) {
+        final amount = int.tryParse(inMatch.group(1) ?? '') ?? 0;
+        final unit = (inMatch.group(2) ?? '').toLowerCase();
+        final seconds = amount * (unit.startsWith('h') ? 3600 : 60);
+        if (seconds <= 0 || seconds > 86400) return 'Choose a reminder between 1 minute and 24 hours from now.';
+        try {
+          final ok = await _alwaysOnChannel.invokeMethod<bool>('setTimer', {'seconds': seconds, 'label': task}) ?? false;
+          return ok ? 'I opened Clock to create a ${inMatch.group(0)} reminder for “${task}”. Confirm it in Clock.' : 'I could not open a compatible Clock app.';
+        } catch (_) { return 'Android could not open Clock. Please try again.'; }
+      }
+      final timeMatch = RegExp(r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', caseSensitive: false).firstMatch(task);
+      if (timeMatch != null) {
+        var hour = int.tryParse(timeMatch.group(1) ?? '') ?? -1;
+        final minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
+        final suffix = (timeMatch.group(3) ?? '').toLowerCase();
+        if (hour < 1 || hour > 12 || minute > 59) return 'Please say a valid time, such as “remind me to study at 7:30 pm”.';
+        hour = suffix == 'am' ? (hour == 12 ? 0 : hour) : (hour == 12 ? 12 : hour + 12);
+        try {
+          final ok = await _alwaysOnChannel.invokeMethod<bool>('setReminderAlarm', {'hour': hour, 'minute': minute, 'label': task}) ?? false;
+          return ok ? 'I opened Clock to set a reminder alarm for “${task}”. Confirm the alarm on screen.' : 'I could not open a compatible Clock app.';
+        } catch (_) { return 'Android could not open Clock. Please try again.'; }
+      }
+      return 'Tell me when, for example “remind me to study in 20 minutes” or “remind me to call Mum at 7 pm”. Android will ask you to confirm the alarm.';
+    }
+    if (q.startsWith('add calendar event ') || q.startsWith('create calendar event ')) {
+      final title = input.trim().replaceFirst(RegExp(r'^(add|create) calendar event\s+', caseSensitive: false), '').trim();
+      if (title.isEmpty) return 'Tell me the event title, for example “add calendar event Study time tomorrow at 3 pm”.';
+      final when = RegExp(r'\b(tomorrow|today)\b.*?\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', caseSensitive: false).firstMatch(title);
+      if (when == null) return 'Include a day and time, such as “add calendar event Study tomorrow at 3 pm”. I’ll open your calendar so you can review and save it.';
+      final now = DateTime.now();
+      final day = (when.group(1) ?? '').toLowerCase();
+      var hour = int.tryParse(when.group(2) ?? '') ?? 0;
+      final minute = int.tryParse(when.group(3) ?? '0') ?? 0;
+      final suffix = (when.group(4) ?? '').toLowerCase();
+      hour = suffix == 'am' ? (hour == 12 ? 0 : hour) : (hour == 12 ? 12 : hour + 12);
+      final date = DateTime(now.year, now.month, now.day + (day == 'tomorrow' ? 1 : 0), hour, minute);
+      final cleanTitle = title.replaceFirst(when.group(0)!, '').trim();
+      try {
+        final ok = await _alwaysOnChannel.invokeMethod<bool>('createCalendarEvent', {'title': cleanTitle.isEmpty ? title : cleanTitle, 'beginMillis': date.millisecondsSinceEpoch, 'endMillis': date.add(const Duration(hours: 1)).millisecondsSinceEpoch}) ?? false;
+        return ok ? 'I opened your calendar with the event details. Review and save the event there.' : 'I could not find a calendar app that can create events.';
+      } catch (_) { return 'Android could not open your calendar. Please try again.'; }
+    }
+    if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal AI assistant. I can chat, speak replies, search the web, open websites, and help with everyday tasks.';
     if (q.contains('open wifi settings') || q.contains('open wi-fi settings')) { await _openDeviceSettings('wifi'); return 'Opening Wi-Fi settings. You can choose your network there.'; }
     if (q.contains('open bluetooth settings') || q.contains('open bluetooth')) { await _openDeviceSettings('bluetooth'); return 'Opening Bluetooth settings.'; }
     if (q.contains('open display settings')) { await _openDeviceSettings('display'); return 'Opening display settings.'; }
@@ -483,32 +557,23 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     return null;
   }
 
-
   Future<void> _pickAndAnalyzeImage() async {
     try {
       final image = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 78, maxWidth: 1600);
       if (image == null || !mounted) return;
       final bytes = await image.readAsBytes();
-      if (bytes.isEmpty) {
-        _add(false, 'I could not read that image. Please choose another image.');
-        return;
-      }
+      if (bytes.isEmpty) { _add(false, 'I could not read that image. Please choose another image.'); return; }
       final prompt = _input.text.trim().isEmpty ? 'Describe this image and answer what you can infer from it.' : _input.text.trim();
       _input.clear();
       _add(true, 'Image question: ${prompt}');
       setState(() { _thinking = true; _status = 'ANALYSING IMAGE'; });
       String reply;
-      try {
-        reply = await _askAI(prompt, imageBase64: base64Encode(bytes), imageMimeType: image.mimeType ?? 'image/jpeg');
-      } catch (_) {
-        reply = 'I could not analyse this image. Check your internet connection and make sure your Seri AI server supports image understanding.';
-      }
+      try { reply = await _askAI(prompt, imageBase64: base64Encode(bytes), imageMimeType: image.mimeType ?? 'image/jpeg'); }
+      catch (_) { reply = 'I could not analyse this image. Check your internet connection and make sure your Seri AI server supports image understanding.'; }
       _add(false, reply);
       if (mounted) setState(() { _thinking = false; _status = 'READY WHEN YOU ARE'; });
       if (_voiceReplies) await _speak(reply);
-    } catch (_) {
-      if (mounted) _add(false, 'Image selection failed. Please try again.');
-    }
+    } catch (_) { if (mounted) _add(false, 'Image selection failed. Please try again.'); }
   }
 
   Future<String> _askAI(String prompt, {String? imageBase64, String imageMimeType = 'image/jpeg'}) async {
@@ -732,530 +797,6 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const SizedBox(width: 4),
         IconButton(tooltip: 'Analyse an image', onPressed: _thinking ? null : _pickAndAnalyzeImage, icon: const Icon(Icons.image_search_rounded, color: cyan)),
         const SizedBox(width: 4),
-        IconButton.filled(tooltip: 'Send message', onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
-        const SizedBox(width: 4),
-        GestureDetector(onTap: _listen, child: AnimatedContainer(duration: const Duration(milliseconds: 180), width: 50, height: 50,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: _listening ? const Color(0xFFB83B58) : cyan, boxShadow: [BoxShadow(color: (_listening ? Colors.redAccent : cyan).withValues(alpha: .24), blurRadius: 15, spreadRadius: 1)]),
-          child: Icon(_listening ? Icons.stop_rounded : Icons.mic_rounded, color: bg, size: 24))),
-      ])),
-      Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('VOICE  •  AI CHAT  •  SMART ACTIONS', style: TextStyle(color: Colors.white.withValues(alpha: .28), fontSize: 8, letterSpacing: 2))),
-    ])),
-      if (_wakeHubVisible)
-        Positioned.fill(
-          child: AnimatedOpacity(
-            opacity: _wakeHubVisible ? 1 : 0,
-            duration: const Duration(milliseconds: 260),
-            child: Container(
-              color: const Color(0x8802050D),
-              child: Stack(children: [
-                Positioned(top: -90, left: -60, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [const Color(0xFF174C83).withValues(alpha: .32), Colors.transparent])))),
-                Positioned(bottom: -70, right: -70, child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withValues(alpha: .18), Colors.transparent])))),
-                SafeArea(child: Center(child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                  child: _glass(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                    borderRadius: BorderRadius.circular(34),
-                    tint: const Color(0xD9091428),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Row(children: [
-                        const Icon(Icons.blur_on_rounded, color: cyan, size: 22),
-                        const SizedBox(width: 9),
-                        const Expanded(child: Text('S E R I  //  L I V E', style: TextStyle(letterSpacing: 2.2, fontWeight: FontWeight.w800, fontSize: 12))),
-                        IconButton(onPressed: () => setState(() => _wakeHubVisible = false), icon: const Icon(Icons.close_rounded, color: Colors.white70)),
-                      ]),
-                      const SizedBox(height: 14),
-                      AnimatedBuilder(animation: _pulse, builder: (_, __) {
-                        final pulse = 1 + _pulse.value * .09;
-                        return Transform.scale(scale: pulse, child: Container(
-                          width: 126, height: 126,
-                          decoration: BoxDecoration(shape: BoxShape.circle,
-                            gradient: RadialGradient(colors: [cyan.withValues(alpha: .26), const Color(0xFF0C2850), const Color(0xFF030713)], stops: const [0, .55, 1]),
-                            border: Border.all(color: cyan.withValues(alpha: .75), width: 1.5),
-                            boxShadow: [BoxShadow(color: cyan.withValues(alpha: .32), blurRadius: 42, spreadRadius: 5), BoxShadow(color: const Color(0xFF2D65B7).withValues(alpha: .18), blurRadius: 65, spreadRadius: 12)],
-                          ),
-                          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: .20)), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .12), const Color(0xFF020714).withValues(alpha: .82)])), child: Icon(_listening ? Icons.graphic_eq_rounded : Icons.auto_awesome_rounded, size: 46, color: cyan)),
-                        ));
-                      }),
-                      const SizedBox(height: 18),
-                      Text(_listening ? 'I’M LISTENING' : _thinking ? 'PROCESSING' : 'HI, I’M SERI', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3, color: Colors.white)),
-                      const SizedBox(height: 9),
-                      Text(_heard.isNotEmpty ? _heard : 'Say a command. I’m ready.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
-                      const SizedBox(height: 16),
-                      SizedBox(width: double.infinity, child: FilledButton.icon(
-                        onPressed: () { setState(() { _wakeHubVisible = false; }); if (!_listening && !_thinking) _listen(); },
-                        icon: Icon(_listening ? Icons.graphic_eq_rounded : Icons.mic_rounded),
-                        label: Text(_listening ? 'MICROPHONE ACTIVE' : 'TAP TO SPEAK'),
-                        style: FilledButton.styleFrom(backgroundColor: cyan, foregroundColor: const Color(0xFF03101E), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                      )),
-                      const SizedBox(height: 12),
-                      const Text('LIQUID GLASS  •  PERSONAL AI CORE', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1.7)),
-                    ]),
-                  ),
-                ))),
-              ]),
-            ),
-          ),
-        ),
-    ]),
-  );
-}
-, caseSensitive: false).firstMatch(input.trim());
-    if (rememberMatch != null && !q.startsWith('remember what')) {
-      final item = rememberMatch.group(1)!.trim();
-      if (item.isEmpty) return 'Tell me what you would like me to remember.';
-      if (_memories.any((m) => m.toLowerCase() == item.toLowerCase())) return 'I already have that saved in memory.';
-      final updated = [..._memories, item];
-      if (updated.length > 50) updated.removeAt(0);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('seri_memories', updated);
-      if (mounted) setState(() => _memories = updated);
-      return 'I’ll remember that for future conversations: ${item}';
-    }
-    if (q.contains('what do you remember') || q == 'show memory' || q == 'show my memories') {
-      return _memories.isEmpty ? 'I have no saved memories yet. Say “remember that …” to save something for future conversations.' : 'Here is what I remember:\\n' + _memories.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\\n');
-    }
-    if (q == 'forget everything you remember' || q == 'forget all memories' || q == 'clear memory') {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('seri_memories');
-      if (mounted) setState(() => _memories = []);
-      return 'I deleted all saved memories from this device.';
-    }
-    if (q.startsWith('forget that ')) {
-      final target = input.trim().substring('forget that '.length).trim();
-      final updated = _memories.where((m) => m.toLowerCase() != target.toLowerCase()).toList();
-      if (updated.length == _memories.length) return 'I couldn’t find that exact memory.';
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('seri_memories', updated);
-      if (mounted) setState(() => _memories = updated);
-      return 'I forgot: ${target}';
-    }
-    if (q.startsWith('remind me to ') || q.startsWith('remind me ')) {
-      final task = input.trim().replaceFirst(RegExp(r'^remind me(?: to)?\\s+', caseSensitive: false), '');
-      final inMatch = RegExp(r'\\bin\\s+(\\d+)\\s*(minutes?|mins?|hours?|hrs?)\\b', caseSensitive: false).firstMatch(task);
-      if (inMatch != null) {
-        final amount = int.tryParse(inMatch.group(1) ?? '') ?? 0;
-        final unit = (inMatch.group(2) ?? '').toLowerCase();
-        final seconds = amount * (unit.startsWith('h') ? 3600 : 60);
-        if (seconds <= 0 || seconds > 86400) return 'Choose a reminder between 1 minute and 24 hours from now.';
-        try {
-          final ok = await _alwaysOnChannel.invokeMethod<bool>('setTimer', {'seconds': seconds, 'label': task}) ?? false;
-          return ok ? 'I opened Clock to create a ${inMatch.group(0)} reminder for “${task}”. Confirm it in Clock.' : 'I could not open a compatible Clock app.';
-        } catch (_) { return 'Android could not open Clock. Please try again.'; }
-      }
-      final timeMatch = RegExp(r'\\bat\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\b', caseSensitive: false).firstMatch(task);
-      if (timeMatch != null) {
-        var hour = int.tryParse(timeMatch.group(1) ?? '') ?? -1;
-        final minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
-        final suffix = (timeMatch.group(3) ?? '').toLowerCase();
-        if (hour < 1 || hour > 12 || minute > 59) return 'Please say a valid time, such as “remind me to study at 7:30 pm”.';
-        hour = suffix == 'am' ? (hour == 12 ? 0 : hour) : (hour == 12 ? 12 : hour + 12);
-        try {
-          final ok = await _alwaysOnChannel.invokeMethod<bool>('setReminderAlarm', {'hour': hour, 'minute': minute, 'label': task}) ?? false;
-          return ok ? 'I opened Clock to set a reminder alarm for “${task}”. Confirm the alarm on screen.' : 'I could not open a compatible Clock app.';
-        } catch (_) { return 'Android could not open Clock. Please try again.'; }
-      }
-      return 'Tell me when, for example “remind me to study in 20 minutes” or “remind me to call Mum at 7 pm”. Android will ask you to confirm the alarm.';
-    }
-    if (q.startsWith('add calendar event ') || q.startsWith('create calendar event ')) {
-      final title = input.trim().replaceFirst(RegExp(r'^(add|create) calendar event\\s+', caseSensitive: false), '').trim();
-      if (title.isEmpty) return 'Tell me the event title, for example “add calendar event Study time tomorrow at 3 pm”.';
-      final when = RegExp(r'\\b(tomorrow|today)\\b.*?\\b(?:at\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\b', caseSensitive: false).firstMatch(title);
-      if (when == null) return 'Include a day and time, such as “add calendar event Study tomorrow at 3 pm”. I’ll open your calendar so you can review and save it.';
-      final now = DateTime.now();
-      final day = (when.group(1) ?? '').toLowerCase();
-      var hour = int.tryParse(when.group(2) ?? '') ?? 0;
-      final minute = int.tryParse(when.group(3) ?? '0') ?? 0;
-      final suffix = (when.group(4) ?? '').toLowerCase();
-      hour = suffix == 'am' ? (hour == 12 ? 0 : hour) : (hour == 12 ? 12 : hour + 12);
-      final date = DateTime(now.year, now.month, now.day + (day == 'tomorrow' ? 1 : 0), hour, minute);
-      final cleanTitle = title.replaceFirst(when.group(0)!, '').trim();
-      try {
-        final ok = await _alwaysOnChannel.invokeMethod<bool>('createCalendarEvent', {'title': cleanTitle.isEmpty ? title : cleanTitle, 'beginMillis': date.millisecondsSinceEpoch, 'endMillis': date.add(const Duration(hours: 1)).millisecondsSinceEpoch}) ?? false;
-        return ok ? 'I opened your calendar with the event details. Review and save the event there.' : 'I could not find a calendar app that can create events.';
-      } catch (_) { return 'Android could not open your calendar. Please try again.'; }
-    }
-    if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal AI assistant. I can chat, speak replies, search the web, open websites, and help with everyday tasks.';
-    if (q.contains('open wifi settings') || q.contains('open wi-fi settings')) { await _openDeviceSettings('wifi'); return 'Opening Wi-Fi settings. You can choose your network there.'; }
-    if (q.contains('open bluetooth settings') || q.contains('open bluetooth')) { await _openDeviceSettings('bluetooth'); return 'Opening Bluetooth settings.'; }
-    if (q.contains('open display settings')) { await _openDeviceSettings('display'); return 'Opening display settings.'; }
-    if (q.contains('open notification settings')) { await _openDeviceSettings('notifications'); return 'Opening notification settings.'; }
-    if (q.contains('open battery settings')) { await _openDeviceSettings('battery'); return 'Opening battery settings.'; }
-    if (q.contains('open app settings')) { await _openDeviceSettings('app'); return 'Opening Seri app settings.'; }
-    if (q.contains('open phone settings') || q == 'open settings' || q == 'settings') { await _openDeviceSettings('main'); return 'Opening your phone settings.'; }
-    if (q.startsWith('set timer') || q.startsWith('start timer') || q.startsWith('timer for ')) {
-      final durationMatch = RegExp(r'(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)', caseSensitive: false).firstMatch(q);
-      if (durationMatch == null) return 'Tell me the duration, for example “set timer for 5 minutes”.';
-      final amount = int.tryParse(durationMatch.group(1) ?? '') ?? 0;
-      final unit = (durationMatch.group(2) ?? '').toLowerCase();
-      final seconds = amount * (unit.startsWith('h') ? 3600 : unit.startsWith('m') ? 60 : 1);
-      if (seconds <= 0 || seconds > 86400) return 'Please choose a timer between 1 second and 24 hours.';
-      try {
-        final opened = await _alwaysOnChannel.invokeMethod<bool>('setTimer', {'seconds': seconds, 'label': 'Seri timer'}) ?? false;
-        return opened ? 'Opening your clock app to set a timer for ${durationMatch.group(0)}. Confirm it on screen.' : 'I could not find a clock app that accepts timer requests.';
-      } on PlatformException {
-        return 'Android could not open the timer screen. Try opening your Clock app manually.';
-      }
-    }
-    if (q.startsWith('set alarm') || q.startsWith('wake me at ')) {
-      final alarmText = q.startsWith('wake me at ') ? q.substring('wake me at '.length) : q.replaceFirst(RegExp(r'^set alarm(?:\s+for)?\s*'), '');
-      final timeMatch = RegExp(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', caseSensitive: false).firstMatch(alarmText);
-      if (timeMatch == null) return 'Tell me the time, for example “set alarm for 7:30 am”.';
-      var hour = int.tryParse(timeMatch.group(1) ?? '') ?? -1;
-      final minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
-      final suffix = (timeMatch.group(3) ?? '').toLowerCase();
-      if (suffix.isNotEmpty) {
-        if (hour < 1 || hour > 12) return 'Please say a valid 12-hour time, such as 7:30 am.';
-        if (suffix == 'am') hour = hour == 12 ? 0 : hour;
-        if (suffix == 'pm') hour = hour == 12 ? 12 : hour + 12;
-      }
-      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return 'Please say a valid alarm time.';
-      try {
-        final opened = await _alwaysOnChannel.invokeMethod<bool>('setAlarm', {'hour': hour, 'minute': minute, 'label': 'Seri alarm'}) ?? false;
-        return opened ? 'Opening your clock app to set the alarm for ${timeMatch.group(0)}. Confirm it on screen.' : 'I could not find a clock app that accepts alarm requests.';
-      } on PlatformException {
-        return 'Android could not open the alarm screen. Try opening your Clock app manually.';
-      }
-    }
-    if (q.contains('what time') || q == 'time' || q == 'tell me the time') return 'It is ${TimeOfDay.now().format(context)}.';
-    if (q.contains('what date') || q.contains("today's date") || q.contains('what day')) {
-      final n = DateTime.now();
-      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      return 'Today is ${days[n.weekday - 1]}, ${months[n.month - 1]} ${n.day}, ${n.year}.';
-    }
-    if (q.startsWith('call ')) {
-      final target = input.trim().substring(5).trim();
-      final number = target.replaceAll(RegExp(r'[^0-9+*#,;]'), '');
-      if (number.isEmpty) return 'Please say “call” followed by a phone number. I will open the dialer so you can confirm the call.';
-      await _open('tel:$number');
-      return 'I opened your phone dialer for $number. Review the number and tap call when you are ready.';
-    }
-    if (q.startsWith('text ') || q.startsWith('send sms to ')) {
-      final raw = input.trim();
-      final number = q.startsWith('send sms to ') ? raw.substring(12).trim() : raw.substring(5).trim();
-      final recipient = number.replaceAll(RegExp(r'[^0-9+*#,;]'), '');
-      if (recipient.isEmpty) return 'Please provide a phone number after “text” or “send SMS to”.';
-      await _open('sms:$recipient');
-      return 'I opened your SMS composer for $recipient. Type your message and send it yourself.';
-    }
-    if (q.contains('open youtube')) { await _open('https://youtube.com'); return 'Opening YouTube.'; }
-    if (q.contains('open google')) { await _open('https://google.com'); return 'Opening Google.'; }
-    if (q.contains('open whatsapp')) { await _open('https://wa.me/'); return 'Opening WhatsApp.'; }
-    if (q.contains('open facebook')) { await _open('https://facebook.com'); return 'Opening Facebook.'; }
-    if (q.contains('open instagram')) { await _open('https://instagram.com'); return 'Opening Instagram.'; }
-    if (q.contains('open gmail')) { await _open('https://mail.google.com'); return 'Opening Gmail.'; }
-    if (q.contains('open maps') || q.contains('open google maps')) { await _open('https://maps.google.com'); return 'Opening Google Maps.'; }
-    // Open arbitrary websites, not only the built-in shortcuts above.
-    String? websiteTarget;
-    if (q.startsWith('open website ')) {
-      websiteTarget = input.trim().substring('open website '.length).trim();
-    } else if (q.startsWith('visit ')) {
-      websiteTarget = input.trim().substring('visit '.length).trim();
-    } else if (q.startsWith('go to ')) {
-      websiteTarget = input.trim().substring('go to '.length).trim();
-    } else if (q.startsWith('open ')) {
-      websiteTarget = input.trim().substring('open '.length).trim();
-    }
-    if (websiteTarget != null && websiteTarget.isNotEmpty) {
-      final looksLikeUrl = websiteTarget.startsWith(RegExp(r'https?://', caseSensitive: false)) ||
-          RegExp(r'^(?:www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::[0-9]+)?(?:/.*)?$', caseSensitive: false).hasMatch(websiteTarget);
-      if (looksLikeUrl) {
-        final normalized = websiteTarget.startsWith(RegExp(r'https?://', caseSensitive: false))
-            ? websiteTarget : 'https://' + websiteTarget;
-        await _open(normalized);
-        return 'Opening ' + websiteTarget + '.';
-      }
-    }
-    if (q.startsWith('navigate to ') || q.startsWith('directions to ')) {
-      final place = q.replaceFirst(RegExp(r'^(navigate to|directions to)\s+'), '');
-      await _open('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place)}');
-      return 'Opening directions for $place.';
-    }
-    if (q.contains('weather')) {
-      final place = q.replaceFirst(RegExp(r'.*weather(?:\s+in)?\s*'), '').trim();
-      final weatherQuery = place.isEmpty ? 'weather today' : 'weather in $place';
-      await _open('https://www.google.com/search?q=${Uri.encodeComponent(weatherQuery)}');
-      return 'Searching for the latest weather information.';
-    }
-    if (q.startsWith('search for ') || q.startsWith('google ')) {
-      final term = q.replaceFirst(RegExp(r'^(search for|google)\s+'), '');
-      await _open('https://www.google.com/search?q=${Uri.encodeComponent(term)}');
-      return 'Searching the web for $term.';
-    }
-    if (q.startsWith('translate ')) {
-      final match = RegExp(r'^translate (.+?) to ([a-zA-Z ]+)$', caseSensitive: false).firstMatch(input.trim());
-      if (match == null) {
-        await _open('https://translate.google.com');
-        return 'Opening Google Translate. Try “translate hello to French”.';
-      }
-      final textToTranslate = match.group(1)!.trim();
-      final language = match.group(2)!.trim().toLowerCase();
-      const languageCodes = {
-        'english': 'en', 'french': 'fr', 'spanish': 'es', 'german': 'de',
-        'portuguese': 'pt', 'arabic': 'ar', 'hindi': 'hi', 'yoruba': 'yo',
-        'igbo': 'ig', 'hausa': 'ha', 'italian': 'it', 'japanese': 'ja',
-        'chinese': 'zh-CN', 'korean': 'ko', 'russian': 'ru', 'swahili': 'sw',
-      };
-      final code = languageCodes[language] ?? language;
-      await _open('https://translate.google.com/?sl=auto&tl=${Uri.encodeComponent(code)}&text=${Uri.encodeComponent(textToTranslate)}&op=translate');
-      return 'Opening translation into ${language}.';
-    }
-    if (q.startsWith('play ')) {
-      final track = input.trim().substring(5).trim();
-      if (track.isEmpty) return 'Tell me the song or artist you want to play.';
-      await _open('https://www.youtube.com/results?search_query=${Uri.encodeComponent(track)}');
-      return 'Searching YouTube for ${track}. Choose a result to play.';
-    }
-    if (q.startsWith('calculate ') || q.startsWith('what is ')) {
-      final expression = input.trim().replaceFirst(RegExp(r'^(calculate|what is)\s+', caseSensitive: false), '').trim();
-      if (RegExp(r'^[0-9\s().+*/%\-]+$').hasMatch(expression) && RegExp(r'\d').hasMatch(expression)) {
-        await _open('https://www.google.com/search?q=${Uri.encodeComponent(expression + ' =')}');
-        return 'Opening the calculator result for ${expression}.';
-      }
-    }
-
-    if (q.contains('stop talking') || q == 'stop speaking' || q == 'be quiet') {
-      await _tts.stop();
-      return 'Okay. I’ve stopped speaking.';
-    }
-    if (q.contains('thank you')) return 'You’re welcome. I’m always happy to help.';
-    if (q == 'clear chat' || q == 'clear conversation') {
-      setState(() { _messages.clear(); _messages.add(ChatItem('Conversation cleared. What would you like to do next?', false)); });
-      return 'I cleared the conversation.';
-    }
-    // Fall back to the Android launcher so voice commands can open any installed app.
-    if (q.startsWith('open ')) {
-      final appName = input.trim().substring('open '.length).trim();
-      if (appName.isNotEmpty) {
-        try {
-          final opened = await _alwaysOnChannel.invokeMethod<bool>('openApp', {'name': appName}) ?? false;
-          if (opened) return 'Opening ${appName}.';
-        } on PlatformException {
-          // Continue to the helpful fallback below.
-        } on MissingPluginException {
-          // Older APKs may not yet include native app launching.
-        }
-        return 'I couldn’t find an installed app matching “${appName}”. Try its exact name, or say “open website example.com”.';
-      }
-    }
-    return null;
-  }
-
-  Future<String> _askAI(String prompt) async {
-    if (_endpoint.trim().isEmpty) {
-      return 'Your message is ready, but full AI chat is not connected yet. Open Settings and add your AI server’s /chat endpoint. You can still use my quick actions for time, date, websites, web search, maps, and weather searches.';
-    }
-    final uri = Uri.tryParse(_endpoint);
-    if (uri == null || !uri.hasScheme || (uri.scheme != 'https' && uri.scheme != 'http')) return 'The AI server URL is invalid. Please check Settings.';
-    final history = _messages.length > 12 ? _messages.sublist(_messages.length - 12) : _messages;
-    final payload = {
-      'message': prompt,
-      'text': prompt,
-      'history': history.map((m) => {'role': m.user ? 'user' : 'assistant', 'content': m.text}).toList(),
-    };
-    final response = await http.post(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload)).timeout(const Duration(seconds: 45));
-    if (response.statusCode < 200 || response.statusCode >= 300) return 'Your AI server returned error ${response.statusCode}. Please try again in a moment.';
-    final data = jsonDecode(response.body);
-    if (data is Map) {
-      final value = data['reply'] ?? data['response'] ?? data['answer'] ?? data['message'];
-      if (value != null && value.toString().trim().isNotEmpty) return value.toString();
-    }
-    return response.body.length > 1800 ? response.body.substring(0, 1800) : response.body;
-  }
-
-  Future<void> _open(String url) async {
-    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) throw Exception('Could not open link');
-  }
-
-  Future<void> _speak(String text) async {
-    try { await _tts.stop(); await _tts.speak(text); } catch (_) {}
-  }
-
-  void _showSettings() {
-    final controller = TextEditingController(text: _endpoint);
-    var voice = _voiceReplies;
-    var wakeWord = _wakeWordMode;
-    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: panel, builder: (ctx) => StatefulBuilder(builder: (ctx, modalSet) => Padding(
-      padding: EdgeInsets.fromLTRB(22, 22, 22, MediaQuery.of(ctx).viewInsets.bottom + 26),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('SER I / SETTINGS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-        const SizedBox(height: 8),
-        const Text('Connect your own AI chat backend. Never put secret provider API keys inside the app.', style: TextStyle(color: Colors.white60, height: 1.4)),
-        const SizedBox(height: 16),
-        SizedBox(width: double.infinity, child: OutlinedButton.icon(
-          onPressed: _requestBatteryExemption,
-          icon: const Icon(Icons.battery_saver_rounded),
-          label: const Text('ALLOW BACKGROUND BATTERY USE'),
-        )),
-        const Padding(
-          padding: EdgeInsets.only(top: 5, bottom: 10),
-          child: Text('Allow battery use if Android asks. Also set Seri battery use to Unrestricted in App info if your phone offers it.', style: TextStyle(color: Colors.white54, fontSize: 11)),
-        ),
-        SizedBox(width: double.infinity, child: OutlinedButton.icon(
-          onPressed: () => _openDeviceSettings('app'),
-          icon: const Icon(Icons.app_settings_alt_rounded),
-          label: const Text('OPEN SERI APP PERMISSIONS'),
-        )),
-        const SizedBox(height: 8),
-        SizedBox(width: double.infinity, child: OutlinedButton.icon(
-          onPressed: _requestDefaultAssistant,
-          icon: const Icon(Icons.assistant_rounded),
-          label: const Text('SET SERI AS DEFAULT ASSISTANT'),
-        )),
-        const SizedBox(height: 14),
-        const Text('PHONE CONNECTIONS', style: TextStyle(color: cyan, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.4)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(onPressed: () => _openDeviceSettings('wifi'), icon: const Icon(Icons.wifi_rounded), label: const Text('Wi-Fi')),
-          OutlinedButton.icon(onPressed: () => _openDeviceSettings('bluetooth'), icon: const Icon(Icons.bluetooth_rounded), label: const Text('Bluetooth')),
-          OutlinedButton.icon(onPressed: () => _openDeviceSettings('display'), icon: const Icon(Icons.brightness_6_rounded), label: const Text('Display')),
-          OutlinedButton.icon(onPressed: () => _openDeviceSettings('notifications'), icon: const Icon(Icons.notifications_active_rounded), label: const Text('Notifications')),
-          OutlinedButton.icon(onPressed: () => _openDeviceSettings('battery'), icon: const Icon(Icons.battery_charging_full_rounded), label: const Text('Battery')),
-        ]),
-        const Padding(
-          padding: EdgeInsets.only(top: 8, bottom: 6),
-          child: Text('These buttons open Android settings for you to review and change. Android requires your approval for sensitive access; Seri cannot silently grant every permission or bypass system restrictions.', style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4)),
-        ),
-        const Padding(
-          padding: EdgeInsets.only(top: 5, bottom: 10),
-          child: Text('Android will ask you to confirm. Seri cannot change this setting silently.', style: TextStyle(color: Colors.white54, fontSize: 11)),
-        ),
-        TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeThumbColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Starts while Seri is open and keeps a foreground notification. Android/OEM microphone policies may still stop it; this cannot be bypassed by an app.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeThumbColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
-        const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: FilledButton(onPressed: () async {
-          final wasWakeEnabled = _wakeWordMode;
-          setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; _wakeWordMode = wakeWord; });
-          await _saveSettings();
-          Navigator.pop(ctx);
-          if (_wakeWordMode) {
-            if (_listening) await _speech.stop();
-            await _startWakeService();
-          } else if (wasWakeEnabled) {
-            await _stopWakeService();
-          }
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_wakeWordMode ? 'Always-on wake mode enabled. Keep the notification visible.' : 'Seri settings saved; wake mode is off')));
-        }, child: const Text('SAVE SETTINGS'))),
-      ]),
-    )));
-  }
-
-  Widget _glass({required Widget child, EdgeInsetsGeometry padding = const EdgeInsets.all(12), BorderRadius borderRadius = const BorderRadius.all(Radius.circular(20)), Color tint = const Color(0xA60B1931)}) => ClipRRect(
-    borderRadius: borderRadius,
-    child: BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-      child: Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: tint,
-          borderRadius: borderRadius,
-          border: Border.all(color: glassBorder, width: 1),
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .095), const Color(0xFF10294A).withValues(alpha: .40), const Color(0xFF050B18).withValues(alpha: .75)]),
-          boxShadow: [BoxShadow(color: cyan.withValues(alpha: .055), blurRadius: 24, spreadRadius: 1)],
-        ),
-        child: child,
-      ),
-    ),
-  );
-
-  Widget _quickAction(IconData icon, String label, String prompt) => InkWell(
-    borderRadius: BorderRadius.circular(14), onTap: () => _send(prompt),
-    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      child: _glass(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11), borderRadius: BorderRadius.circular(14), tint: const Color(0xA6091930), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: cyan, size: 16), const SizedBox(width: 7), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))]))),
-  );
-
-  @override Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      leading: const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.graphic_eq_rounded, color: cyan, size: 27)),
-      title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('S E R I  //  C O R E', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 2.2)),
-        Text('J.A.R.V.I.S-INSPIRED PERSONAL AI', style: TextStyle(fontSize: 8, color: Colors.white54, letterSpacing: 1.3)),
-      ]),
-      actions: [
-        IconButton(tooltip: 'Clear conversation', onPressed: () => showDialog(context: context, builder: (ctx) => AlertDialog(
-          backgroundColor: panel, title: const Text('Clear conversation?'), content: const Text('This removes the messages from this screen.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')), FilledButton(onPressed: () { setState(() { _messages.clear(); _messages.add(ChatItem('Conversation cleared. I’m ready.', false)); }); Navigator.pop(ctx); }, child: const Text('CLEAR'))],
-        )), icon: const Icon(Icons.delete_sweep_outlined)),
-        IconButton(tooltip: 'Settings', onPressed: _showSettings, icon: const Icon(Icons.tune_rounded)),
-        const SizedBox(width: 4),
-      ]),
-    body: Stack(children: [
-      Positioned.fill(child: DecoratedBox(decoration: const BoxDecoration(gradient: RadialGradient(center: Alignment(-.75, -.85), radius: 1.35, colors: [Color(0xFF142D50), bg, Color(0xFF02040A)], stops: [0, .48, 1])))),
-      Positioned(top: -90, right: -90, child: IgnorePointer(child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [const Color(0xFF2D70B8).withValues(alpha: .24), Colors.transparent]))))),
-      Positioned(bottom: 70, left: -110, child: IgnorePointer(child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withValues(alpha: .075), Colors.transparent]))))),
-      SafeArea(child: Column(children: [
-      SizedBox(height: 184, child: Center(child: AnimatedBuilder(animation: _pulse, builder: (_, __) {
-        final scale = 0.95 + _pulse.value * 0.055;
-        return Transform.scale(scale: scale, child: Container(width: 156, height: 156,
-          decoration: BoxDecoration(shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [cyan.withValues(alpha: _listening ? .30 : .14), const Color(0xFF102B4E), bg], stops: const [0, .56, 1]),
-            border: Border.all(color: Colors.white.withValues(alpha: .14), width: 1),
-            boxShadow: [BoxShadow(color: cyan.withValues(alpha: _listening ? .35 : .15), blurRadius: 38, spreadRadius: 2), BoxShadow(color: const Color(0xFF3D74C2).withValues(alpha: .15), blurRadius: 60, spreadRadius: 8)]),
-          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .10), const Color(0xFF061329).withValues(alpha: .45)]), border: Border.all(color: cyan.withValues(alpha: .72), width: 1.4)),
-            child: Container(margin: const EdgeInsets.all(10), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF071226).withValues(alpha: .8), border: Border.all(color: cyan.withValues(alpha: .30))),
-              child: Icon(_listening ? Icons.graphic_eq_rounded : _speaking ? Icons.volume_up_rounded : _thinking ? Icons.bubble_chart_rounded : Icons.auto_awesome, size: 49, color: cyan)))));
-      }))),
-      Text(_status, style: const TextStyle(color: cyan, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 5),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(_listening && _heard.isNotEmpty ? _heard : _thinking ? 'Analysing your request...' : 'Your world, one command away.', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12))),
-      const SizedBox(height: 10),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Row(children: [
-          Expanded(child: _glass(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), borderRadius: BorderRadius.circular(14), child: Row(children: [
-            Container(width: 7, height: 7, decoration: BoxDecoration(color: _wakeWordMode ? cyan : Colors.greenAccent, shape: BoxShape.circle, boxShadow: [BoxShadow(color: (_wakeWordMode ? cyan : Colors.greenAccent).withValues(alpha: .45), blurRadius: 8)])),
-            const SizedBox(width: 7),
-            Expanded(child: Text(_wakeWordMode ? 'WAKE SYSTEM ARMED' : 'CORE SYSTEM ONLINE', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.w700))),
-          ]))),
-          const SizedBox(width: 8),
-          _glass(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), borderRadius: BorderRadius.circular(14), child: Row(children: [
-            Icon(_ready ? Icons.mic_none_rounded : Icons.mic_off_outlined, size: 13, color: _ready ? cyan : Colors.orangeAccent),
-            const SizedBox(width: 5),
-            Text(_ready ? 'VOICE READY' : 'VOICE CHECK', style: const TextStyle(fontSize: 9, letterSpacing: .7)),
-          ])),
-        ]),
-      ),
-      const SizedBox(height: 10),
-      SizedBox(height: 42, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 14), children: [
-        _quickAction(Icons.access_time_rounded, 'Time', 'What time is it?'),
-        const SizedBox(width: 8), _quickAction(Icons.language_rounded, 'Search', 'Search for latest technology news'),
-        const SizedBox(width: 8), _quickAction(Icons.map_outlined, 'Maps', 'Open Google Maps'),
-        const SizedBox(width: 8), _quickAction(Icons.wb_sunny_outlined, 'Weather', 'What is the weather today?'),
-        const SizedBox(width: 8), _quickAction(Icons.settings_suggest_outlined, 'Device', 'Open phone settings'),
-      ])),
-      const SizedBox(height: 10),
-      Expanded(child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        child: _glass(padding: const EdgeInsets.all(13), borderRadius: BorderRadius.circular(24), tint: const Color(0x7A07142A), child: ListView.builder(controller: _scroll, padding: EdgeInsets.zero, reverse: true, itemCount: _messages.length,
-          itemBuilder: (_, index) {
-            final item = _messages[_messages.length - 1 - index];
-            return Align(alignment: item.user ? Alignment.centerRight : Alignment.centerLeft, child: Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * .82),
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.fromLTRB(13, 10, 10, 8),
-              decoration: BoxDecoration(color: item.user ? const Color(0xFF123444) : const Color(0xFF182338),
-                borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(item.user ? 16 : 4), bottomRight: Radius.circular(item.user ? 4 : 16)),
-                border: Border.all(color: (item.user ? cyan : Colors.white).withValues(alpha: .10))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(item.text, style: const TextStyle(fontSize: 13.2, height: 1.42)),
-                const SizedBox(height: 5),
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('${item.user ? 'YOU' : 'SERI'}  •  ${TimeOfDay.fromDateTime(item.time).format(context)}', style: TextStyle(color: Colors.white.withValues(alpha: .38), fontSize: 8, letterSpacing: .7)),
-                  if (!item.user) IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 30, minHeight: 26), padding: EdgeInsets.zero, tooltip: 'Speak reply', onPressed: () => _speak(item.text), icon: const Icon(Icons.volume_up_outlined, size: 15, color: cyan)),
-                  IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 30, minHeight: 26), padding: EdgeInsets.zero, tooltip: 'Copy message', onPressed: () { Clipboard.setData(ClipboardData(text: item.text)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied'), duration: Duration(seconds: 1))); }, icon: const Icon(Icons.copy_rounded, size: 13, color: Colors.white54)),
-                ]),
-              ]),
-            ));
-          },
-        )),
-      )),
-      Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Row(children: [
-        Expanded(child: _glass(padding: EdgeInsets.zero, borderRadius: BorderRadius.circular(28), tint: const Color(0xC0081429), child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), maxLines: 3, minLines: 1,
-          style: const TextStyle(fontSize: 14),
-          decoration: const InputDecoration(hintText: 'Ask Seri anything…', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
-        ))),
-        const SizedBox(width: 8),
         IconButton.filled(tooltip: 'Send message', onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
         const SizedBox(width: 4),
         GestureDetector(onTap: _listen, child: AnimatedContainer(duration: const Duration(milliseconds: 180), width: 50, height: 50,
