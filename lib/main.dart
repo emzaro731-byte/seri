@@ -56,6 +56,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   bool _ready = false, _listening = false, _thinking = false, _speaking = false;
   bool _voiceReplies = true;
   bool _wakeWordMode = false;
+  bool _awaitingWakeCommand = false;
   String _status = 'READY WHEN YOU ARE';
   String _endpoint = const String.fromEnvironment('SERI_API_URL');
   String _heard = '';
@@ -85,6 +86,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
 
   Future<void> _handleNativeCall(MethodCall call) async {
     if (call.method == 'wakeDetected' && _wakeWordMode && mounted) {
+      _awaitingWakeCommand = true;
       setState(() { _heard = ''; _status = 'SERI ACTIVATED • LISTENING'; });
       await Future.delayed(const Duration(milliseconds: 350));
       if (mounted && !_listening && !_thinking) await _listen();
@@ -97,10 +99,6 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (state == AppLifecycleState.paused) {
       if (_listening) _speech.stop();
       _startWakeService();
-    } else if (state == AppLifecycleState.resumed) {
-      _stopWakeService().then((_) {
-        if (mounted && _wakeWordMode && !_listening && !_thinking && !_speaking) _listen();
-      });
     }
   }
 
@@ -221,17 +219,23 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         if (result.finalResult && _heard.trim().isNotEmpty) {
           final heard = _heard.trim();
           if (_wakeWordMode) {
-            final wake = RegExp(r'\b(?:hey|hi|hello)\s+seri\b', caseSensitive: false).firstMatch(heard);
-            if (wake != null) {
-              final command = heard.substring(wake.end).trim().replaceFirst(RegExp(r'^[,.:;\s]+'), '');
-              if (command.isNotEmpty) {
-                _send(command);
-              } else {
-                _speak('I’m listening.');
-                _scheduleWakeListen(900);
-              }
+            if (_awaitingWakeCommand) {
+              _awaitingWakeCommand = false;
+              _send(heard);
             } else {
-              _scheduleWakeListen(500);
+              final wake = RegExp(r'\b(?:hey|hi|hello)\s+seri\b', caseSensitive: false).firstMatch(heard);
+              if (wake != null) {
+                final command = heard.substring(wake.end).trim().replaceFirst(RegExp(r'^[,.:;\s]+'), '');
+                if (command.isNotEmpty) {
+                  _send(command);
+                } else {
+                  _awaitingWakeCommand = true;
+                  _speak('I’m listening.');
+                  _scheduleWakeListen(900);
+                }
+              } else {
+                _scheduleWakeListen(500);
+              }
             }
           } else {
             _send(heard);
@@ -396,7 +400,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
           await _saveSettings();
           Navigator.pop(ctx);
           if (_wakeWordMode) {
-            if (!_listening) await _listen();
+            if (_listening) await _speech.stop();
+            await _startWakeService();
           } else if (wasWakeEnabled) {
             await _stopWakeService();
           }
