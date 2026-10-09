@@ -80,7 +80,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         _voiceReplies = prefs.getBool('seri_voice_replies') ?? true;
         _wakeWordMode = prefs.getBool('seri_wake_word') ?? false;
       });
-      if (_wakeWordMode && mounted) await _listen();
+      if (_wakeWordMode && mounted) await _startWakeService();
     } catch (_) {}
   }
 
