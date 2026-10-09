@@ -128,7 +128,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       await _tts.setSpeechRate(0.46);
       await _tts.setPitch(0.92);
       _tts.setStartHandler(() { if (mounted) setState(() { _speaking = true; _status = 'SERI IS SPEAKING'; }); });
-      _tts.setCompletionHandler(() { if (mounted) setState(() { _speaking = false; _status = 'READY WHEN YOU ARE'; }); });
+      _tts.setCompletionHandler(() {
+        if (mounted) setState(() { _speaking = false; _status = _wakeWordMode ? 'ALWAYS-ON WAKE MODE' : 'READY WHEN YOU ARE'; });
+        if (_wakeWordMode) _scheduleWakeListen(500);
+      });
       _tts.setCancelHandler(() { if (mounted) setState(() => _speaking = false); });
     } catch (_) {
       _ready = false;
