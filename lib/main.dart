@@ -310,6 +310,40 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (q.contains('open battery settings')) { await _openDeviceSettings('battery'); return 'Opening battery settings.'; }
     if (q.contains('open app settings')) { await _openDeviceSettings('app'); return 'Opening Seri app settings.'; }
     if (q.contains('open phone settings') || q == 'open settings' || q == 'settings') { await _openDeviceSettings('main'); return 'Opening your phone settings.'; }
+    if (q.startsWith('set timer') || q.startsWith('start timer') || q.startsWith('timer for ')) {
+      final durationMatch = RegExp(r'(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)', caseSensitive: false).firstMatch(q);
+      if (durationMatch == null) return 'Tell me the duration, for example “set timer for 5 minutes”.';
+      final amount = int.tryParse(durationMatch.group(1) ?? '') ?? 0;
+      final unit = (durationMatch.group(2) ?? '').toLowerCase();
+      final seconds = amount * (unit.startsWith('h') ? 3600 : unit.startsWith('m') ? 60 : 1);
+      if (seconds <= 0 || seconds > 86400) return 'Please choose a timer between 1 second and 24 hours.';
+      try {
+        final opened = await _alwaysOnChannel.invokeMethod<bool>('setTimer', {'seconds': seconds, 'label': 'Seri timer'}) ?? false;
+        return opened ? 'Opening your clock app to set a timer for ${durationMatch.group(0)}. Confirm it on screen.' : 'I could not find a clock app that accepts timer requests.';
+      } on PlatformException {
+        return 'Android could not open the timer screen. Try opening your Clock app manually.';
+      }
+    }
+    if (q.startsWith('set alarm') || q.startsWith('wake me at ')) {
+      final alarmText = q.startsWith('wake me at ') ? q.substring('wake me at '.length) : q.replaceFirst(RegExp(r'^set alarm(?:\s+for)?\s*'), '');
+      final timeMatch = RegExp(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', caseSensitive: false).firstMatch(alarmText);
+      if (timeMatch == null) return 'Tell me the time, for example “set alarm for 7:30 am”.';
+      var hour = int.tryParse(timeMatch.group(1) ?? '') ?? -1;
+      final minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
+      final suffix = (timeMatch.group(3) ?? '').toLowerCase();
+      if (suffix.isNotEmpty) {
+        if (hour < 1 || hour > 12) return 'Please say a valid 12-hour time, such as 7:30 am.';
+        if (suffix == 'am') hour = hour == 12 ? 0 : hour;
+        if (suffix == 'pm') hour = hour == 12 ? 12 : hour + 12;
+      }
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return 'Please say a valid alarm time.';
+      try {
+        final opened = await _alwaysOnChannel.invokeMethod<bool>('setAlarm', {'hour': hour, 'minute': minute, 'label': 'Seri alarm'}) ?? false;
+        return opened ? 'Opening your clock app to set the alarm for ${timeMatch.group(0)}. Confirm it on screen.' : 'I could not find a clock app that accepts alarm requests.';
+      } on PlatformException {
+        return 'Android could not open the alarm screen. Try opening your Clock app manually.';
+      }
+    }
     if (q.contains('what time') || q == 'time' || q == 'tell me the time') return 'It is ${TimeOfDay.now().format(context)}.';
     if (q.contains('what date') || q.contains("today's date") || q.contains('what day')) {
       final n = DateTime.now();
