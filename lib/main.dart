@@ -50,7 +50,6 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   bool _ready = false, _listening = false, _thinking = false, _speaking = false;
   bool _voiceReplies = true;
   bool _wakeWordMode = false;
-  bool _wakeRestartPending = false;
   String _status = 'READY WHEN YOU ARE';
   String _endpoint = const String.fromEnvironment('SERI_API_URL');
   String _heard = '';
