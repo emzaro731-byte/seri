@@ -46,7 +46,7 @@ class AssistantHome extends StatefulWidget {
   @override State<AssistantHome> createState() => _AssistantHomeState();
 }
 
-class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateMixin {
+class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateMixin, WidgetsBindingObserver {
   final stt.SpeechToText _speech = stt.SpeechToText();
   final FlutterTts _tts = FlutterTts();
   final TextEditingController _input = TextEditingController();
@@ -62,6 +62,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
 
   @override void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _alwaysOnChannel.setMethodCallHandler(_handleNativeCall);
     _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
     _messages.add(ChatItem('Systems online. I’m Seri, your personal assistant. Ask me a question or try one of the quick actions below.', false));
     _loadSettings();
@@ -77,11 +79,29 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         _voiceReplies = prefs.getBool('seri_voice_replies') ?? true;
         _wakeWordMode = prefs.getBool('seri_wake_word') ?? false;
       });
-      if (_wakeWordMode && mounted) {
-        await _listen();
-        await _startWakeService();
-      }
+      if (_wakeWordMode && mounted) await _listen();
     } catch (_) {}
+  }
+
+  Future<void> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'wakeDetected' && _wakeWordMode && mounted) {
+      setState(() { _heard = ''; _status = 'SERI ACTIVATED • LISTENING'; });
+      await Future.delayed(const Duration(milliseconds: 350));
+      if (mounted && !_listening && !_thinking) await _listen();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_wakeWordMode) return;
+    if (state == AppLifecycleState.paused) {
+      if (_listening) _speech.stop();
+      _startWakeService();
+    } else if (state == AppLifecycleState.resumed) {
+      _stopWakeService().then((_) {
+        if (mounted && _wakeWordMode && !_listening && !_thinking && !_speaking) _listen();
+      });
+    }
   }
 
   Future<void> _startWakeService() async {
@@ -159,6 +179,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   }
 
   @override void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _alwaysOnChannel.setMethodCallHandler(null);
     _pulse.dispose(); _input.dispose(); _scroll.dispose(); _speech.cancel(); _tts.stop(); super.dispose();
   }
 
@@ -398,8 +420,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     appBar: AppBar(
       leading: const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.graphic_eq_rounded, color: cyan, size: 27)),
       title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('S E R I', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3)),
-        Text('PERSONAL AI SYSTEM', style: TextStyle(fontSize: 9, color: Colors.white54, letterSpacing: 1.6)),
+        Text('S E R I  //  C O R E', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 2.2)),
+        Text('J.A.R.V.I.S-INSPIRED PERSONAL AI', style: TextStyle(fontSize: 8, color: Colors.white54, letterSpacing: 1.3)),
       ]),
       actions: [
         IconButton(tooltip: 'Clear conversation', onPressed: () => showDialog(context: context, builder: (ctx) => AlertDialog(
@@ -434,6 +456,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const SizedBox(width: 8), _quickAction(Icons.language_rounded, 'Search', 'Search for latest technology news'),
         const SizedBox(width: 8), _quickAction(Icons.map_outlined, 'Maps', 'Open Google Maps'),
         const SizedBox(width: 8), _quickAction(Icons.wb_sunny_outlined, 'Weather', 'What is the weather today?'),
+        const SizedBox(width: 8), _quickAction(Icons.settings_suggest_outlined, 'Device', 'Open phone settings'),
       ])),
       const SizedBox(height: 10),
       Expanded(child: Container(
@@ -464,7 +487,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Row(children: [
         Expanded(child: _glass(padding: EdgeInsets.zero, borderRadius: BorderRadius.circular(28), tint: const Color(0xC0081429), child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), maxLines: 3, minLines: 1,
           style: const TextStyle(fontSize: 14),
-          decoration: const InputDecoration(hintText: 'Message Seri...', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
+          decoration: const InputDecoration(hintText: 'Ask Seri anything…', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
         ))),
         const SizedBox(width: 8),
         IconButton.filled(tooltip: 'Send message', onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
