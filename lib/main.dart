@@ -411,7 +411,37 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       return 'Searching the web for $term.';
     }
     if (q.startsWith('translate ')) {
-      final match = RegExp(r'^translate (.+?) to ([a-zA-Z ]+)
+      final match = RegExp(r'^translate (.+?) to ([a-zA-Z ]+)$', caseSensitive: false).firstMatch(input.trim());
+      if (match == null) {
+        await _open('https://translate.google.com');
+        return 'Opening Google Translate. Try “translate hello to French”.';
+      }
+      final textToTranslate = match.group(1)!.trim();
+      final language = match.group(2)!.trim().toLowerCase();
+      const languageCodes = {
+        'english': 'en', 'french': 'fr', 'spanish': 'es', 'german': 'de',
+        'portuguese': 'pt', 'arabic': 'ar', 'hindi': 'hi', 'yoruba': 'yo',
+        'igbo': 'ig', 'hausa': 'ha', 'italian': 'it', 'japanese': 'ja',
+        'chinese': 'zh-CN', 'korean': 'ko', 'russian': 'ru', 'swahili': 'sw',
+      };
+      final code = languageCodes[language] ?? language;
+      await _open('https://translate.google.com/?sl=auto&tl=${Uri.encodeComponent(code)}&text=${Uri.encodeComponent(textToTranslate)}&op=translate');
+      return 'Opening translation into ${language}.';
+    }
+    if (q.startsWith('play ')) {
+      final track = input.trim().substring(5).trim();
+      if (track.isEmpty) return 'Tell me the song or artist you want to play.';
+      await _open('https://www.youtube.com/results?search_query=${Uri.encodeComponent(track)}');
+      return 'Searching YouTube for ${track}. Choose a result to play.';
+    }
+    if (q.startsWith('calculate ') || q.startsWith('what is ')) {
+      final expression = input.trim().replaceFirst(RegExp(r'^(calculate|what is)\s+', caseSensitive: false), '').trim();
+      if (RegExp(r'^[0-9\s().+*/%\-]+$').hasMatch(expression) && RegExp(r'\d').hasMatch(expression)) {
+        await _open('https://www.google.com/search?q=${Uri.encodeComponent(expression + ' =')}');
+        return 'Opening the calculator result for ${expression}.';
+      }
+    }
+
     if (q.contains('stop talking') || q == 'stop speaking' || q == 'be quiet') {
       await _tts.stop();
       return 'Okay. I’ve stopped speaking.';
