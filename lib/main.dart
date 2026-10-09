@@ -12,6 +12,7 @@ void main() => runApp(const SeriApp());
 const bg = Color(0xFF060914);
 const cyan = Color(0xFF63E9FF);
 const panel = Color(0xFF10182A);
+const _alwaysOnChannel = MethodChannel('com.seriassistant.seri/always_on');
 
 class SeriApp extends StatelessWidget {
   const SeriApp({super.key});
@@ -71,7 +72,34 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         _voiceReplies = prefs.getBool('seri_voice_replies') ?? true;
         _wakeWordMode = prefs.getBool('seri_wake_word') ?? false;
       });
+      if (_wakeWordMode && mounted) {
+        await _startWakeService();
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted && !_listening) _listen();
+      }
     } catch (_) {}
+  }
+
+  Future<void> _startWakeService() async {
+    try {
+      await _alwaysOnChannel.invokeMethod<void>('start');
+    } on PlatformException catch (e) {
+      if (mounted) _add(false, 'Always-on service could not start: ${e.message ?? 'Android refused the request'}. Keep Seri open and check microphone permission.');
+    } on MissingPluginException {
+      if (mounted) _add(false, 'This APK does not include the always-on Android service yet. Build the latest version from GitHub Actions.');
+    }
+  }
+
+  Future<void> _stopWakeService() async {
+    try { await _alwaysOnChannel.invokeMethod<void>('stop'); } catch (_) {}
+    if (_listening) await _speech.stop();
+  }
+
+  void _scheduleWakeListen([int milliseconds = 1000]) {
+    if (!_wakeWordMode || !mounted) return;
+    Future.delayed(Duration(milliseconds: milliseconds), () {
+      if (mounted && _wakeWordMode && !_thinking && !_speaking && !_listening) _listen();
+    });
   }
 
   Future<void> _saveSettings() async {
@@ -84,7 +112,14 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   Future<void> _setupVoice() async {
     try {
       _ready = await _speech.initialize(
-        onStatus: (s) { if (mounted) setState(() { _listening = s == 'listening'; if (!_listening && !_thinking && !_speaking) _status = 'READY WHEN YOU ARE'; }); },
+        onStatus: (s) {
+          if (!mounted) return;
+          setState(() {
+            _listening = s == 'listening';
+            if (!_listening && !_thinking && !_speaking) _status = _wakeWordMode ? 'ALWAYS-ON WAKE MODE' : 'READY WHEN YOU ARE';
+          });
+          if (_wakeWordMode && (s == 'done' || s == 'notListening')) _scheduleWakeListen(1200);
+        },
         onError: (_) { if (mounted) setState(() { _listening = false; _status = 'VOICE SERVICE UNAVAILABLE'; }); },
       );
       await _tts.setLanguage('en-US');
@@ -145,14 +180,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
                 _send(command);
               } else {
                 _speak('I’m listening.');
-                Future.delayed(const Duration(milliseconds: 900), () {
-                  if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
-                });
+                _scheduleWakeListen(900);
               }
             } else {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
-              });
+              _scheduleWakeListen(500);
             }
           } else {
             _send(heard);
@@ -179,11 +210,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     _add(false, reply);
     if (mounted) setState(() { _thinking = false; _status = 'READY WHEN YOU ARE'; });
     if (_voiceReplies) await _speak(reply);
-    if (mounted && _wakeWordMode && !_listening) {
-      Future.delayed(const Duration(milliseconds: 700), () {
-        if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
-      });
-    }
+    if (mounted && _wakeWordMode && !_listening) _scheduleWakeListen(900);
   }
 
   Future<String?> _command(String input) async {
@@ -288,13 +315,20 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const SizedBox(height: 16),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Hey Seri wake phrase'), subtitle: const Text('Foreground only: keep Seri open and tap the mic to listen. Not background listening.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
         const SizedBox(height: 10),
         SizedBox(width: double.infinity, child: FilledButton(onPressed: () {
+          final wasWakeEnabled = _wakeWordMode;
           setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; _wakeWordMode = wakeWord; });
           _saveSettings();
           Navigator.pop(ctx);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_wakeWordMode ? 'Settings saved. Tap the mic, then say “Hey Seri”.' : 'Seri settings saved')));
+          if (_wakeWordMode) {
+            await _startWakeService();
+            if (!_listening) await _listen();
+          } else if (wasWakeEnabled) {
+            await _stopWakeService();
+          }
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_wakeWordMode ? 'Always-on wake mode enabled. Keep the notification visible.' : 'Seri settings saved; wake mode is off')));
         }, child: const Text('SAVE SETTINGS'))),
       ]),
     )));
