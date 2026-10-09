@@ -94,6 +94,22 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     }
   }
 
+  Future<void> _requestDefaultAssistant() async {
+    try {
+      await _alwaysOnChannel.invokeMethod<void>('setDefaultAssistant');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Choose Seri in Android’s assistant app screen and confirm the system prompt.'),
+          duration: Duration(seconds: 4),
+        ));
+      }
+    } on PlatformException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open assistant settings: ${e.message ?? 'Unknown error'}')));
+    } on MissingPluginException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Install the latest Android build to enable default assistant setup.')));
+    }
+  }
+
   Future<void> _stopWakeService() async {
     try { await _alwaysOnChannel.invokeMethod<void>('stop'); } catch (_) {}
     if (_listening) await _speech.stop();
@@ -326,6 +342,18 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const SizedBox(height: 8),
         const Text('Connect your own AI chat backend. Never put secret provider API keys inside the app.', style: TextStyle(color: Colors.white60, height: 1.4)),
         const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _requestDefaultAssistant,
+            icon: const Icon(Icons.assistant_rounded),
+            label: const Text('SET SERI AS DEFAULT ASSISTANT'),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 5, bottom: 10),
+          child: Text('Android will ask you to confirm. Seri cannot change this setting silently.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+        ),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeThumbColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeThumbColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
