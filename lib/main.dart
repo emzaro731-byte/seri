@@ -1,89 +1,146 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const SeriApp());
-const bg = Color(0xFF070B16), cyan = Color(0xFF5DEBFF), panel = Color(0xFF101A2C);
+
+const bg = Color(0xFF060914);
+const cyan = Color(0xFF63E9FF);
+const panel = Color(0xFF10182A);
 
 class SeriApp extends StatelessWidget {
   const SeriApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Seri AI', debugShowCheckedModeBanner: false,
-    theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: bg, colorScheme: const ColorScheme.dark(primary: cyan, surface: panel), useMaterial3: true),
-    home: const AssistantHome());
+    theme: ThemeData.dark().copyWith(
+      scaffoldBackgroundColor: bg,
+      colorScheme: const ColorScheme.dark(primary: cyan, surface: panel),
+      appBarTheme: const AppBarTheme(backgroundColor: bg, foregroundColor: Colors.white),
+      useMaterial3: true,
+    ),
+    home: const AssistantHome(),
+  );
 }
+
 class ChatItem {
-  final String text; final bool user;
-  ChatItem(this.text, this.user);
+  final String text;
+  final bool user;
+  final DateTime time;
+  ChatItem(this.text, this.user) : time = DateTime.now();
 }
+
 class AssistantHome extends StatefulWidget {
   const AssistantHome({super.key});
   @override State<AssistantHome> createState() => _AssistantHomeState();
 }
+
 class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateMixin {
   final stt.SpeechToText _speech = stt.SpeechToText();
   final FlutterTts _tts = FlutterTts();
   final TextEditingController _input = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   final List<ChatItem> _messages = [];
   late final AnimationController _pulse;
   bool _ready = false, _listening = false, _thinking = false, _speaking = false;
-  String _status = 'YOUR PERSONAL AI', _endpoint = const String.fromEnvironment('SERI_API_URL'), _heard = '';
+  bool _voiceReplies = true;
+  String _status = 'READY WHEN YOU ARE';
+  String _endpoint = const String.fromEnvironment('SERI_API_URL');
+  String _heard = '';
 
   @override void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
-    _messages.add(ChatItem('Hello! I’m Seri. Tap the microphone and tell me what you need.', false));
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
+    _messages.add(ChatItem('Systems online. I’m Seri, your personal assistant. Ask me a question or try one of the quick actions below.', false));
     _setupVoice();
   }
+
   Future<void> _setupVoice() async {
-    _ready = await _speech.initialize(
-      onStatus: (s) { if (mounted) setState(() { _listening = s == 'listening'; if (!_listening && !_thinking && !_speaking) _status = 'YOUR PERSONAL AI'; }); },
-      onError: (_) { if (mounted) setState(() { _listening = false; _status = 'VOICE UNAVAILABLE'; }); });
-    await _tts.setLanguage('en-US'); await _tts.setSpeechRate(0.48); await _tts.setPitch(0.95);
-    _tts.setStartHandler(() { if (mounted) setState(() { _speaking = true; _status = 'SERI IS SPEAKING'; }); });
-    _tts.setCompletionHandler(() { if (mounted) setState(() { _speaking = false; _status = 'YOUR PERSONAL AI'; }); });
-    _tts.setCancelHandler(() { if (mounted) setState(() => _speaking = false); });
+    try {
+      _ready = await _speech.initialize(
+        onStatus: (s) { if (mounted) setState(() { _listening = s == 'listening'; if (!_listening && !_thinking && !_speaking) _status = 'READY WHEN YOU ARE'; }); },
+        onError: (_) { if (mounted) setState(() { _listening = false; _status = 'VOICE SERVICE UNAVAILABLE'; }); },
+      );
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.46);
+      await _tts.setPitch(0.92);
+      _tts.setStartHandler(() { if (mounted) setState(() { _speaking = true; _status = 'SERI IS SPEAKING'; }); });
+      _tts.setCompletionHandler(() { if (mounted) setState(() { _speaking = false; _status = 'READY WHEN YOU ARE'; }); });
+      _tts.setCancelHandler(() { if (mounted) setState(() => _speaking = false); });
+    } catch (_) {
+      _ready = false;
+    }
     if (mounted) setState(() {});
   }
-  @override void dispose() { _pulse.dispose(); _input.dispose(); _speech.cancel(); _tts.stop(); super.dispose(); }
+
+  @override void dispose() {
+    _pulse.dispose(); _input.dispose(); _scroll.dispose(); _speech.cancel(); _tts.stop(); super.dispose();
+  }
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 240), curve: Curves.easeOut);
+    });
+  }
+
+  void _add(bool user, String text) {
+    if (!mounted) return;
+    setState(() { _messages.add(ChatItem(text, user)); if (_messages.length > 100) _messages.removeAt(0); });
+    _scrollToLatest();
+  }
 
   Future<void> _listen() async {
     if (_thinking) return;
     if (_listening) { await _speech.stop(); return; }
     if (!_ready) await _setupVoice();
-    if (!_ready) { _add(false, 'Voice recognition is unavailable. Check microphone permission and speech services, or type below.'); return; }
+    if (!_ready) {
+      _add(false, 'Voice recognition is not available on this device right now. Check microphone permission and your Android speech service, or type your message.');
+      return;
+    }
     await _tts.stop();
-    setState(() { _heard = ''; _status = 'LISTENING...'; });
-    await _speech.listen(listenFor: const Duration(seconds: 30), pauseFor: const Duration(seconds: 4), onResult: (result) {
-      if (!mounted) return;
-      setState(() { _heard = result.recognizedWords; _input.text = _heard; _input.selection = TextSelection.collapsed(offset: _input.text.length); });
-      if (result.finalResult && _heard.trim().isNotEmpty) _send(_heard);
-    });
+    setState(() { _heard = ''; _status = 'LISTENING TO YOU'; });
+    await _speech.listen(
+      listenFor: const Duration(seconds: 35),
+      pauseFor: const Duration(seconds: 4),
+      onResult: (result) {
+        if (!mounted) return;
+        setState(() {
+          _heard = result.recognizedWords;
+          _input.text = _heard;
+          _input.selection = TextSelection.collapsed(offset: _input.text.length);
+        });
+        if (result.finalResult && _heard.trim().isNotEmpty) _send(_heard);
+      },
+    );
   }
-  void _add(bool user, String text) {
-    if (!mounted) return;
-    setState(() { _messages.add(ChatItem(text, user)); if (_messages.length > 80) _messages.removeAt(0); });
-  }
+
   Future<void> _send([String? raw]) async {
-    final text = (raw ?? _input.text).trim();
-    if (text.isEmpty || _thinking) return;
-    _input.clear(); if (_listening) await _speech.stop();
-    _add(true, text); setState(() { _thinking = true; _status = 'THINKING...'; });
+    final prompt = (raw ?? _input.text).trim();
+    if (prompt.isEmpty || _thinking) return;
+    HapticFeedback.selectionClick();
+    _input.clear();
+    if (_listening) await _speech.stop();
+    _add(true, prompt);
+    setState(() { _thinking = true; _status = 'PROCESSING REQUEST'; });
     String reply;
-    try { reply = await _command(text) ?? await _askAI(text); }
-    catch (_) { reply = 'I couldn’t reach the AI service. Try again, or configure your AI endpoint in settings.'; }
+    try {
+      reply = await _command(prompt) ?? await _askAI(prompt);
+    } catch (_) {
+      reply = 'I couldn’t complete that request. Check your internet connection and AI server settings, then try again.';
+    }
     _add(false, reply);
-    if (mounted) setState(() { _thinking = false; _status = 'YOUR PERSONAL AI'; });
-    await _speak(reply);
+    if (mounted) setState(() { _thinking = false; _status = 'READY WHEN YOU ARE'; });
+    if (_voiceReplies) await _speak(reply);
   }
+
   Future<String?> _command(String input) async {
     final q = input.toLowerCase().trim();
-    if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal voice assistant. I’m here to help you get things done.';
-    if (q.contains('what time') || q == 'time') return 'It is ${TimeOfDay.now().format(context)}.';
+    if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal AI assistant. I can chat, speak replies, search the web, open websites, and help with everyday tasks.';
+    if (q.contains('what time') || q == 'time' || q == 'tell me the time') return 'It is ${TimeOfDay.now().format(context)}.';
     if (q.contains('what date') || q.contains("today's date") || q.contains('what day')) {
       final n = DateTime.now();
       const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -95,87 +152,173 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (q.contains('open whatsapp')) { await _open('https://wa.me/'); return 'Opening WhatsApp.'; }
     if (q.contains('open facebook')) { await _open('https://facebook.com'); return 'Opening Facebook.'; }
     if (q.contains('open instagram')) { await _open('https://instagram.com'); return 'Opening Instagram.'; }
+    if (q.contains('open gmail')) { await _open('https://mail.google.com'); return 'Opening Gmail.'; }
+    if (q.contains('open maps') || q.contains('open google maps')) { await _open('https://maps.google.com'); return 'Opening Google Maps.'; }
+    if (q.startsWith('navigate to ') || q.startsWith('directions to ')) {
+      final place = q.replaceFirst(RegExp(r'^(navigate to|directions to)\s+'), '');
+      await _open('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place)}');
+      return 'Opening directions for $place.';
+    }
+    if (q.contains('weather')) {
+      final place = q.replaceFirst(RegExp(r'.*weather(?:\s+in)?\s*'), '').trim();
+      await _open('https://www.google.com/search?q=${Uri.encodeComponent('weather ${place.isEmpty ? 'today' : 'in $place')}')}');
+      return 'Searching for the latest weather information.';
+    }
     if (q.startsWith('search for ') || q.startsWith('google ')) {
       final term = q.replaceFirst(RegExp(r'^(search for|google)\s+'), '');
       await _open('https://www.google.com/search?q=${Uri.encodeComponent(term)}');
       return 'Searching the web for $term.';
     }
-    if (q.contains('stop talking') || q == 'stop') { await _tts.stop(); return 'Okay, I’ll be quiet.'; }
+    if (q.contains('stop talking') || q == 'stop speaking' || q == 'be quiet') {
+      await _tts.stop();
+      return 'Okay. I’ve stopped speaking.';
+    }
     if (q.contains('thank you')) return 'You’re welcome. I’m always happy to help.';
+    if (q == 'clear chat' || q == 'clear conversation') {
+      setState(() { _messages.clear(); _messages.add(ChatItem('Conversation cleared. What would you like to do next?', false)); });
+      return 'I cleared the conversation.';
+    }
     return null;
   }
-  Future<String> _askAI(String text) async {
-    if (_endpoint.trim().isEmpty) return 'I heard: “$text”. To enable AI conversations, deploy your AI backend and build with --dart-define=SERI_API_URL=https://your-api.example.com/chat. Keep API keys on the server, never inside the app.';
+
+  Future<String> _askAI(String prompt) async {
+    if (_endpoint.trim().isEmpty) {
+      return 'Your message is ready, but full AI chat is not connected yet. Open Settings and add your AI server’s /chat endpoint. You can still use my quick actions for time, date, websites, web search, maps, and weather searches.';
+    }
     final uri = Uri.tryParse(_endpoint);
-    if (uri == null || !uri.hasScheme) return 'Your AI server address looks invalid. Check the Seri settings.';
-    final response = await http.post(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode({'message': text, 'text': text})).timeout(const Duration(seconds: 35));
-    if (response.statusCode < 200 || response.statusCode >= 300) return 'The AI server returned an error (${response.statusCode}). Please try again later.';
+    if (uri == null || !uri.hasScheme || (uri.scheme != 'https' && uri.scheme != 'http')) return 'The AI server URL is invalid. Please check Settings.';
+    final history = _messages.length > 12 ? _messages.sublist(_messages.length - 12) : _messages;
+    final payload = {
+      'message': prompt,
+      'text': prompt,
+      'history': history.map((m) => {'role': m.user ? 'user' : 'assistant', 'content': m.text}).toList(),
+    };
+    final response = await http.post(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload)).timeout(const Duration(seconds: 45));
+    if (response.statusCode < 200 || response.statusCode >= 300) return 'Your AI server returned error ${response.statusCode}. Please try again in a moment.';
     final data = jsonDecode(response.body);
     if (data is Map) {
       final value = data['reply'] ?? data['response'] ?? data['answer'] ?? data['message'];
       if (value != null && value.toString().trim().isNotEmpty) return value.toString();
     }
-    return response.body.length > 1500 ? response.body.substring(0, 1500) : response.body;
+    return response.body.length > 1800 ? response.body.substring(0, 1800) : response.body;
   }
+
   Future<void> _open(String url) async {
-    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) throw Exception('Could not open URL');
+    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) throw Exception('Could not open link');
   }
-  Future<void> _speak(String text) async { try { await _tts.stop(); await _tts.speak(text); } catch (_) {} }
+
+  Future<void> _speak(String text) async {
+    try { await _tts.stop(); await _tts.speak(text); } catch (_) {}
+  }
 
   void _showSettings() {
     final controller = TextEditingController(text: _endpoint);
-    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: panel, builder: (ctx) => Padding(
+    var voice = _voiceReplies;
+    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: panel, builder: (ctx) => StatefulBuilder(builder: (ctx, modalSet) => Padding(
       padding: EdgeInsets.fromLTRB(22, 22, 22, MediaQuery.of(ctx).viewInsets.bottom + 26),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Seri settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8), const Text('Optional AI backend URL. Keep provider API keys on your server.', style: TextStyle(color: Colors.white60)),
+        const Text('SER I / SETTINGS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        const SizedBox(height: 8),
+        const Text('Connect your own AI chat backend. Never put secret provider API keys inside the app.', style: TextStyle(color: Colors.white60, height: 1.4)),
         const SizedBox(height: 16),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
-        const SizedBox(height: 16),
-        SizedBox(width: double.infinity, child: FilledButton(onPressed: () { setState(() => _endpoint = controller.text.trim()); Navigator.pop(ctx); }, child: const Text('Save endpoint'))),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: FilledButton(onPressed: () {
+          setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; });
+          Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seri settings saved')));
+        }, child: const Text('SAVE SETTINGS'))),
       ]),
-    ));
+    )));
   }
 
+  Widget _quickAction(IconData icon, String label, String prompt) => InkWell(
+    borderRadius: BorderRadius.circular(14), onTap: () => _send(prompt),
+    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14), border: Border.all(color: cyan.withOpacity(.13))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: cyan, size: 16), const SizedBox(width: 7), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))])),
+  );
+
   @override Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(backgroundColor: bg, elevation: 0,
+    appBar: AppBar(
       leading: const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.graphic_eq_rounded, color: cyan, size: 27)),
       title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('S E R I', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3)),
-        Text('PERSONAL AI ASSISTANT', style: TextStyle(fontSize: 9, color: Colors.white54, letterSpacing: 1.6))]),
-      actions: [IconButton(onPressed: _showSettings, icon: const Icon(Icons.tune_rounded)), const SizedBox(width: 6)]),
+        Text('PERSONAL AI SYSTEM', style: TextStyle(fontSize: 9, color: Colors.white54, letterSpacing: 1.6)),
+      ]),
+      actions: [
+        IconButton(tooltip: 'Clear conversation', onPressed: () => showDialog(context: context, builder: (ctx) => AlertDialog(
+          backgroundColor: panel, title: const Text('Clear conversation?'), content: const Text('This removes the messages from this screen.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')), FilledButton(onPressed: () { setState(() { _messages.clear(); _messages.add(ChatItem('Conversation cleared. I’m ready.', false)); }); Navigator.pop(ctx); }, child: const Text('CLEAR'))],
+        )), icon: const Icon(Icons.delete_sweep_outlined)),
+        IconButton(tooltip: 'Settings', onPressed: _showSettings, icon: const Icon(Icons.tune_rounded)),
+        const SizedBox(width: 4),
+      ]),
     body: SafeArea(child: Column(children: [
-      SizedBox(height: 205, child: Center(child: AnimatedBuilder(animation: _pulse, builder: (_, __) {
-        final scale = 0.94 + _pulse.value * 0.08;
-        return Transform.scale(scale: scale, child: Container(width: 170, height: 170,
-          decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withOpacity(_listening ? .24 : .12), const Color(0xFF12243A), bg], stops: const [0, .55, 1]), boxShadow: [BoxShadow(color: cyan.withOpacity(_listening ? .30 : .12), blurRadius: 36, spreadRadius: 3)]),
-          child: Container(margin: const EdgeInsets.all(13), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: cyan.withOpacity(.65), width: 1.4)),
-            child: Container(margin: const EdgeInsets.all(10), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF0B1525), border: Border.all(color: cyan.withOpacity(.22))),
-              child: Icon(_listening ? Icons.graphic_eq_rounded : _speaking ? Icons.volume_up_rounded : Icons.auto_awesome, size: 55, color: cyan)))));
+      SizedBox(height: 184, child: Center(child: AnimatedBuilder(animation: _pulse, builder: (_, __) {
+        final scale = 0.95 + _pulse.value * 0.055;
+        return Transform.scale(scale: scale, child: Container(width: 156, height: 156,
+          decoration: BoxDecoration(shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [cyan.withOpacity(_listening ? .26 : .12), const Color(0xFF14263D), bg], stops: const [0, .56, 1]),
+            boxShadow: [BoxShadow(color: cyan.withOpacity(_listening ? .32 : .12), blurRadius: 34, spreadRadius: 3)]),
+          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: cyan.withOpacity(.65), width: 1.4)),
+            child: Container(margin: const EdgeInsets.all(10), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF0A1323), border: Border.all(color: cyan.withOpacity(.24))),
+              child: Icon(_listening ? Icons.graphic_eq_rounded : _speaking ? Icons.volume_up_rounded : _thinking ? Icons.bubble_chart_rounded : Icons.auto_awesome, size: 49, color: cyan)))));
       }))),
-      Text(_status, style: const TextStyle(color: cyan, fontSize: 11, letterSpacing: 2.2, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 7),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: Text(_listening && _heard.isNotEmpty ? _heard : _thinking ? 'Let me think that through...' : '“Hey Seri, how can you help me?”', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13))),
+      Text(_status, style: const TextStyle(color: cyan, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 5),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(_listening && _heard.isNotEmpty ? _heard : _thinking ? 'Analysing your request...' : 'Your world, one command away.', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12))),
       const SizedBox(height: 12),
-      Expanded(child: Container(margin: const EdgeInsets.fromLTRB(14, 0, 14, 10), decoration: BoxDecoration(color: panel.withOpacity(.7), borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white.withOpacity(.06))),
-        child: ListView.builder(padding: const EdgeInsets.all(14), reverse: true, itemCount: _messages.length, itemBuilder: (_, index) {
-          final item = _messages[_messages.length - 1 - index];
-          return Align(alignment: item.user ? Alignment.centerRight : Alignment.centerLeft, child: Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * .78), margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(color: item.user ? const Color(0xFF123444) : const Color(0xFF182338), borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(item.user ? 16 : 4), bottomRight: Radius.circular(item.user ? 4 : 16)), border: Border.all(color: (item.user ? cyan : Colors.white).withOpacity(.10))),
-            child: Text(item.text, style: const TextStyle(fontSize: 13.5, height: 1.4))));
-        }))),
-      Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14), child: Row(children: [
-        Expanded(child: Container(decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: cyan.withOpacity(.18))),
-          child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), style: const TextStyle(fontSize: 14),
-            decoration: const InputDecoration(hintText: 'Ask Seri anything...', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 14))))),
-        const SizedBox(width: 9),
-        IconButton.filled(onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
-        const SizedBox(width: 5),
-        GestureDetector(onTap: _listen, child: AnimatedContainer(duration: const Duration(milliseconds: 180), width: 52, height: 52,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: _listening ? const Color(0xFFB83B58) : cyan, boxShadow: [BoxShadow(color: (_listening ? Colors.redAccent : cyan).withOpacity(.24), blurRadius: 16, spreadRadius: 1)]),
-          child: Icon(_listening ? Icons.stop_rounded : Icons.mic_rounded, color: bg, size: 25))),
+      SizedBox(height: 42, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 14), children: [
+        _quickAction(Icons.access_time_rounded, 'Time', 'What time is it?'),
+        const SizedBox(width: 8), _quickAction(Icons.language_rounded, 'Search', 'Search for latest technology news'),
+        const SizedBox(width: 8), _quickAction(Icons.map_outlined, 'Maps', 'Open Google Maps'),
+        const SizedBox(width: 8), _quickAction(Icons.wb_sunny_outlined, 'Weather', 'What is the weather today?'),
       ])),
-      Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('VOICE • CHAT • QUICK ACTIONS', style: TextStyle(color: Colors.white.withOpacity(.28), fontSize: 9, letterSpacing: 2))),
-    ])));
+      const SizedBox(height: 10),
+      Expanded(child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        decoration: BoxDecoration(color: panel.withOpacity(.72), borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white.withOpacity(.06))),
+        child: ListView.builder(controller: _scroll, padding: const EdgeInsets.all(13), reverse: true, itemCount: _messages.length,
+          itemBuilder: (_, index) {
+            final item = _messages[_messages.length - 1 - index];
+            return Align(alignment: item.user ? Alignment.centerRight : Alignment.centerLeft, child: Container(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * .82),
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.fromLTRB(13, 10, 10, 8),
+              decoration: BoxDecoration(color: item.user ? const Color(0xFF123444) : const Color(0xFF182338),
+                borderRadius: BorderRadius.only(topLeft: const Radius.circular(16), topRight: const Radius.circular(16), bottomLeft: Radius.circular(item.user ? 16 : 4), bottomRight: Radius.circular(item.user ? 4 : 16)),
+                border: Border.all(color: (item.user ? cyan : Colors.white).withOpacity(.10))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(item.text, style: const TextStyle(fontSize: 13.2, height: 1.42)),
+                const SizedBox(height: 5),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('${item.user ? 'YOU' : 'SERI'}  •  ${TimeOfDay.fromDateTime(item.time).format(context)}', style: TextStyle(color: Colors.white.withOpacity(.38), fontSize: 8, letterSpacing: .7)),
+                  if (!item.user) IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 30, minHeight: 26), padding: EdgeInsets.zero, tooltip: 'Speak reply', onPressed: () => _speak(item.text), icon: const Icon(Icons.volume_up_outlined, size: 15, color: cyan)),
+                  IconButton(visualDensity: VisualDensity.compact, constraints: const BoxConstraints(minWidth: 30, minHeight: 26), padding: EdgeInsets.zero, tooltip: 'Copy message', onPressed: () { Clipboard.setData(ClipboardData(text: item.text)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied'), duration: Duration(seconds: 1))); }, icon: const Icon(Icons.copy_rounded, size: 13, color: Colors.white54)),
+                ]),
+              ]),
+            ));
+          },
+        ),
+      )),
+      Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Row(children: [
+        Expanded(child: Container(
+          decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: cyan.withOpacity(.20))),
+          child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), maxLines: 3, minLines: 1,
+            style: const TextStyle(fontSize: 14),
+            decoration: const InputDecoration(hintText: 'Message Seri...', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
+          ),
+        )),
+        const SizedBox(width: 8),
+        IconButton.filled(tooltip: 'Send message', onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
+        const SizedBox(width: 4),
+        GestureDetector(onTap: _listen, child: AnimatedContainer(duration: const Duration(milliseconds: 180), width: 50, height: 50,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: _listening ? const Color(0xFFB83B58) : cyan, boxShadow: [BoxShadow(color: (_listening ? Colors.redAccent : cyan).withOpacity(.24), blurRadius: 15, spreadRadius: 1)]),
+          child: Icon(_listening ? Icons.stop_rounded : Icons.mic_rounded, color: bg, size: 24))),
+      ])),
+      Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('VOICE  •  AI CHAT  •  SMART ACTIONS', style: TextStyle(color: Colors.white.withOpacity(.28), fontSize: 8, letterSpacing: 2))),
+    ])),
+  );
 }
