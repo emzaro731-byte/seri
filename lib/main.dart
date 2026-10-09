@@ -66,6 +66,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _alwaysOnChannel.setMethodCallHandler(_handleNativeCall);
+    _notifyNativeReady();
     _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
     _messages.add(ChatItem('Systems online. I’m Seri, your personal assistant. Ask me a question or try one of the quick actions below.', false));
     _loadSettings();
@@ -83,6 +84,14 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       });
       if (_wakeWordMode && mounted) await _startWakeService();
     } catch (_) {}
+  }
+
+  Future<void> _notifyNativeReady() async {
+    try {
+      await _alwaysOnChannel.invokeMethod<void>('ready');
+    } catch (_) {
+      // Older builds may not implement the startup handshake yet.
+    }
   }
 
   Future<void> _handleNativeCall(MethodCall call) async {
