@@ -85,7 +85,50 @@ class MainActivity : FlutterActivity() {
                         result.error("SET_TIMER_FAILED", error.message, null)
                     }
                 }
+                "setReminderAlarm" -> {
+                    try {
+                        val hour = call.argument<Int>("hour") ?: -1
+                        val minute = call.argument<Int>("minute") ?: 0
+                        val label = call.argument<String>("label") ?: "Seri reminder"
+                        if (hour !in 0..23 || minute !in 0..59) {
+                            result.success(false)
+                        } else {
+                            val alarmIntent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                                putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                                putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, label)
+                                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+                            }
+                            if (alarmIntent.resolveActivity(packageManager) != null) {
+                                startActivity(alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                result.success(true)
+                            } else result.success(false)
+                        }
+                    } catch (error: Exception) {
+                        result.error("SET_REMINDER_FAILED", error.message, null)
+                    }
+                }
+                "createCalendarEvent" -> {
+                    try {
+                        val title = call.argument<String>("title") ?: "Seri event"
+                        val begin = call.argument<Long>("beginMillis") ?: 0L
+                        val end = call.argument<Long>("endMillis") ?: (begin + 3600000L)
+                        val eventIntent = Intent(Intent.ACTION_INSERT).apply {
+                            data = android.provider.CalendarContract.Events.CONTENT_URI
+                            putExtra(android.provider.CalendarContract.Events.TITLE, title)
+                            putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+                            putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, end)
+                        }
+                        if (eventIntent.resolveActivity(packageManager) != null) {
+                            startActivity(eventIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            result.success(true)
+                        } else result.success(false)
+                    } catch (error: Exception) {
+                        result.error("CREATE_CALENDAR_EVENT_FAILED", error.message, null)
+                    }
+                }
                 "setAlarm" -> {
+
                     try {
                         val hour = call.argument<Int>("hour") ?: -1
                         val minute = call.argument<Int>("minute") ?: 0
