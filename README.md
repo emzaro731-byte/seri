@@ -4,6 +4,9 @@ Seri is a Flutter Android voice assistant with speech recognition, spoken replie
 
 ## Android app
 The Flutter app includes:
+- Visual question answering: choose an image from your gallery and ask Seri to describe or interpret it (requires a configured AI backend with a vision-capable model)
+- Explicit on-device memory: say “remember that …”, “what do you remember?”, “forget that …”, or “clear memory”; saved memories stay in app preferences until removed
+- Reminder/alarm shortcuts that open Android Clock for confirmation, plus calendar-event creation that opens your calendar editor for review and saving
 - Voice input and text chat
 - Optional always-on wake mode with an Android foreground-service notification and automatic listening restarts
 - Call and SMS shortcuts that open the Android dialer/message composer for user confirmation
@@ -29,6 +32,11 @@ flutter build apk --release
 5. Open the deployed service URL plus `/health` to confirm it is online.
 
 The API provides `GET /`, `GET /health`, and `POST /chat`. The chat endpoint accepts JSON such as `{"message":"Hello Seri","history":[]}` and returns `{"reply":"..." }`. The provider key is stored on the server, not in the Android app.
+
+## Visual understanding and reminders
+Image analysis sends the selected image and question to your configured Seri AI backend. The default vision model is set by `GROQ_VISION_MODEL` (default `meta-llama/llama-4-scout-17b-16e-instruct`); if your provider account does not support it, set `GROQ_VISION_MODEL` to a compatible vision model in the Render environment. Images are not saved as Seri memories. Memories are saved locally only when you explicitly say “remember that …”.
+
+Reminder and calendar commands open Android Clock or the installed calendar app so you can review and confirm. Examples: “remind me to study in 20 minutes”, “remind me to call Mum at 7 pm”, or “add calendar event Study tomorrow at 3 pm”. Android may require an installed compatible app, and these intents do not silently grant permissions or save events without your confirmation.
 
 ## Connect the app
 Open Seri → Settings → AI chat endpoint and enter your deployed URL ending in `/chat`, for example `https://your-service.onrender.com/chat`.
