@@ -33,6 +33,25 @@ class MainActivity : FlutterActivity() {
                     stopService(Intent(this, SeriWakeService::class.java))
                     result.success(true)
                 }
+                "openSystemSettings" -> {
+                    try {
+                        val target = call.argument<String>("target") ?: "main"
+                        val action = when (target) {
+                            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+                            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+                            "display" -> Settings.ACTION_DISPLAY_SETTINGS
+                            "notifications" -> Settings.ACTION_NOTIFICATION_SETTINGS
+                            "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+                            "app" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                            else -> Settings.ACTION_SETTINGS
+                        }
+                        val settingsIntent = if (target == "app") Intent(action, android.net.Uri.parse("package:$packageName")) else Intent(action)
+                        startActivity(settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success(true)
+                    } catch (error: Exception) {
+                        result.error("OPEN_SETTINGS_FAILED", error.message, null)
+                    }
+                }
                 "setDefaultAssistant" -> {
                     try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
