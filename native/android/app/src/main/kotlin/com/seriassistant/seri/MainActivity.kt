@@ -188,7 +188,7 @@ class MainActivity : FlutterActivity() {
                             "wifi" -> Settings.ACTION_WIFI_SETTINGS
                             "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
                             "display" -> Settings.ACTION_DISPLAY_SETTINGS
-                            "notifications" -> Settings.ACTION_NOTIFICATION_SETTINGS
+                            "notifications" -> "android.settings.APP_NOTIFICATION_SETTINGS"
                             "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
                             "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
                             "sound" -> Settings.ACTION_SOUND_SETTINGS
