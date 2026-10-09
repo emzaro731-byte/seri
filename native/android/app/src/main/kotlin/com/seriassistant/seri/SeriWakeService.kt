@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 
 class SeriWakeService : Service() {
     companion object {
@@ -16,9 +17,18 @@ class SeriWakeService : Service() {
         private const val NOTIFICATION_ID = 7412
     }
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        try {
+            val powerManager = getSystemService(PowerManager::class.java)
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Seri::AlwaysOnWakeLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) { }
         val openApp = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -64,6 +74,12 @@ class SeriWakeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
+    override fun onDestroy() {
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) { }
+        wakeLock = null
+        super.onDestroy()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
