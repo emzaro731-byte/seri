@@ -56,3 +56,7 @@ The GitHub Actions workflow adds internet, microphone, notification, and microph
 - Call and SMS commands open the dialer or composer; Seri does not place calls or send messages automatically.
 - A Render free service may sleep when idle and take time to wake up.
 - Never store API keys in Flutter code, GitHub commits, or the APK.
+
+
+## Build the Android APK
+Every push affecting the Flutter app or Android build workflow starts the GitHub Actions build. Open the repository's Actions tab, open the newest **Build Seri Android APK** run, and download the `seri-android-release` artifact after the run succeeds. A source commit does not itself prove the APK built successfully; use the workflow result to confirm.
