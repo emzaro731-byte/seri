@@ -45,7 +45,7 @@ flutter build apk --release --dart-define=SERI_API_URL=https://your-service.onre
 4. On ZTE/Android, open Settings → Apps → Seri → Battery (wording varies) and allow background activity or choose Unrestricted if available. Also allow notifications.
 5. Say “Hey Seri” while speech recognition is listening. If Android's speech service or battery manager stops listening, automatic restart may be delayed.
 
-Android does not guarantee indefinite microphone access. Force-stopping the app, denying microphone access, some OEM battery controls, or a speech recognition provider timeout can stop listening. Seri does not record continuously to a file; Android speech recognition processes the microphone input.
+The service uses a partial wake lock to reduce interruptions when the screen is off, which can noticeably increase battery use. Android does not guarantee indefinite microphone access. Force-stopping the app, denying microphone access, some OEM battery controls, or a speech recognition provider timeout can stop listening. Seri does not record continuously to a file; Android speech recognition processes the microphone input.
 
 ## Android permissions
 The GitHub Actions workflow adds internet, microphone, notification, and microphone foreground-service permissions and the native Android service to the generated Android project.
