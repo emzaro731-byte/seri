@@ -396,6 +396,14 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (q.contains('open display settings')) { await _openDeviceSettings('display'); return 'Opening display settings.'; }
     if (q.contains('open notification settings')) { await _openDeviceSettings('notifications'); return 'Opening notification settings.'; }
     if (q.contains('open battery settings')) { await _openDeviceSettings('battery'); return 'Opening battery settings.'; }
+    if (q.contains('open location settings')) { await _openDeviceSettings('location'); return 'Opening location settings. Android controls location access there.'; }
+    if (q.contains('open sound settings') || q.contains('open volume settings')) { await _openDeviceSettings('sound'); return 'Opening sound settings.'; }
+    if (q.contains('open accessibility settings')) { await _openDeviceSettings('accessibility'); return 'Opening accessibility settings.'; }
+    if (q.contains('open privacy settings')) { await _openDeviceSettings('privacy'); return 'Opening privacy settings.'; }
+    if (q.contains('open date and time settings') || q.contains('open date time settings')) { await _openDeviceSettings('date_time'); return 'Opening date and time settings.'; }
+    if (q.contains('open default apps settings')) { await _openDeviceSettings('default_apps'); return 'Opening default apps settings.'; }
+    if (q.contains('open storage settings')) { await _openDeviceSettings('storage'); return 'Opening storage settings.'; }
+    if (q.contains('open security settings')) { await _openDeviceSettings('security'); return 'Opening security settings.'; }
     if (q.contains('open app settings')) { await _openDeviceSettings('app'); return 'Opening Seri app settings.'; }
     if (q.contains('open phone settings') || q == 'open settings' || q == 'settings') { await _openDeviceSettings('main'); return 'Opening your phone settings.'; }
     if (q.startsWith('set timer') || q.startsWith('start timer') || q.startsWith('timer for ')) {
