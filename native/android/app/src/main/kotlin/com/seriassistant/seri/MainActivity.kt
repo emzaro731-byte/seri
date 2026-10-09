@@ -78,8 +78,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun notifyIfWakeDetected(source: Intent?) {
-        if (source?.getBooleanExtra("seri_wake_detected", false) != true) return
-        source.removeExtra("seri_wake_detected")
+        val wakeIntent = source ?: return
+        if (!wakeIntent.getBooleanExtra("seri_wake_detected", false)) return
+        wakeIntent.removeExtra("seri_wake_detected")
         Handler(Looper.getMainLooper()).postDelayed({ seriChannel?.invokeMethod("wakeDetected", null) }, 500)
     }
 }
