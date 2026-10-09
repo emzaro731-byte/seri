@@ -5,7 +5,7 @@ Seri is a Flutter Android voice assistant with speech recognition, spoken replie
 ## Android app
 The Flutter app includes:
 - Voice input and text chat
-- Optional foreground-only “Hey Seri” wake phrase mode (requires tapping the microphone first; no background listening)
+- Optional always-on wake mode with an Android foreground-service notification and automatic listening restarts
 - Call and SMS shortcuts that open the Android dialer/message composer for user confirmation
 - Spoken responses with a voice-reply toggle
 - Quick actions for time, date, Google/YouTube/WhatsApp/Gmail, web search, weather search, and Maps
@@ -38,12 +38,21 @@ Alternatively, build with:
 flutter build apk --release --dart-define=SERI_API_URL=https://your-service.onrender.com/chat
 ```
 
+## Always-on wake mode
+1. Build and install the latest APK from GitHub Actions.
+2. Open Seri, grant microphone permission, then open Settings and enable **Always-on “Hey Seri”**.
+3. Keep the persistent **Seri is listening** notification visible. The service is started while the app is visible, as required by modern Android microphone foreground-service rules.
+4. On ZTE/Android, open Settings → Apps → Seri → Battery (wording varies) and allow background activity or choose Unrestricted if available. Also allow notifications.
+5. Say “Hey Seri” while speech recognition is listening. If Android's speech service or battery manager stops listening, automatic restart may be delayed.
+
+Android does not guarantee indefinite microphone access. Force-stopping the app, denying microphone access, some OEM battery controls, or a speech recognition provider timeout can stop listening. Seri does not record continuously to a file; Android speech recognition processes the microphone input.
+
 ## Android permissions
-The Android manifest needs internet and microphone permissions. The GitHub Actions workflow adds them when generating the Android project.
+The GitHub Actions workflow adds internet, microphone, notification, and microphone foreground-service permissions and the native Android service to the generated Android project.
 
 ## Notes
 - Voice recognition depends on Android's installed speech services.
-- Wake phrase mode is foreground-only and starts only after you tap the microphone. Android speech recognition can time out or vary by device; this is not an always-on background hotword service.
+- Always-on wake mode uses Android's foreground-service notification and keeps the speech recognizer restarting while the app process remains alive. Android/OEM battery management, speech-service timeouts, microphone permissions, and force-stop can still interrupt it; exempt Seri from battery optimization for best results. This is not a dedicated low-power hardware hotword engine.
 - Call and SMS commands open the dialer or composer; Seri does not place calls or send messages automatically.
 - A Render free service may sleep when idle and take time to wake up.
 - Never store API keys in Flutter code, GitHub commits, or the APK.
