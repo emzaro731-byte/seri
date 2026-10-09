@@ -57,6 +57,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   bool _voiceReplies = true;
   bool _wakeWordMode = false;
   bool _awaitingWakeCommand = false;
+  bool _wakeHubVisible = false;
   String _status = 'READY WHEN YOU ARE';
   String _endpoint = const String.fromEnvironment('SERI_API_URL');
   String _heard = '';
@@ -87,7 +88,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   Future<void> _handleNativeCall(MethodCall call) async {
     if (call.method == 'wakeDetected' && _wakeWordMode && mounted) {
       _awaitingWakeCommand = true;
-      setState(() { _heard = ''; _status = 'SERI ACTIVATED • LISTENING'; });
+      setState(() { _heard = ''; _status = 'SERI ACTIVATED • LISTENING'; _wakeHubVisible = true; });
       await Future.delayed(const Duration(milliseconds: 350));
       if (mounted && !_listening && !_thinking) await _listen();
     }
@@ -534,6 +535,62 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       ])),
       Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('VOICE  •  AI CHAT  •  SMART ACTIONS', style: TextStyle(color: Colors.white.withValues(alpha: .28), fontSize: 8, letterSpacing: 2))),
     ])),
+      if (_wakeHubVisible)
+        Positioned.fill(
+          child: AnimatedOpacity(
+            opacity: _wakeHubVisible ? 1 : 0,
+            duration: const Duration(milliseconds: 260),
+            child: Container(
+              color: const Color(0xE802050D),
+              child: Stack(children: [
+                Positioned(top: -90, left: -60, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [const Color(0xFF174C83).withValues(alpha: .32), Colors.transparent])))),
+                Positioned(bottom: -70, right: -70, child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withValues(alpha: .18), Colors.transparent])))),
+                SafeArea(child: Center(child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: _glass(
+                    padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
+                    borderRadius: BorderRadius.circular(34),
+                    tint: const Color(0xD9091428),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Row(children: [
+                        const Icon(Icons.blur_on_rounded, color: cyan, size: 22),
+                        const SizedBox(width: 9),
+                        const Expanded(child: Text('S E R I  //  L I V E', style: TextStyle(letterSpacing: 2.2, fontWeight: FontWeight.w800, fontSize: 12))),
+                        IconButton(onPressed: () => setState(() => _wakeHubVisible = false), icon: const Icon(Icons.close_rounded, color: Colors.white70)),
+                      ]),
+                      const SizedBox(height: 24),
+                      AnimatedBuilder(animation: _pulse, builder: (_, __) {
+                        final pulse = 1 + _pulse.value * .09;
+                        return Transform.scale(scale: pulse, child: Container(
+                          width: 174, height: 174,
+                          decoration: BoxDecoration(shape: BoxShape.circle,
+                            gradient: RadialGradient(colors: [cyan.withValues(alpha: .26), const Color(0xFF0C2850), const Color(0xFF030713)], stops: const [0, .55, 1]),
+                            border: Border.all(color: cyan.withValues(alpha: .75), width: 1.5),
+                            boxShadow: [BoxShadow(color: cyan.withValues(alpha: .32), blurRadius: 42, spreadRadius: 5), BoxShadow(color: const Color(0xFF2D65B7).withValues(alpha: .18), blurRadius: 65, spreadRadius: 12)],
+                          ),
+                          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: .20)), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .12), const Color(0xFF020714).withValues(alpha: .82)])), child: Icon(_listening ? Icons.graphic_eq_rounded : Icons.auto_awesome_rounded, size: 62, color: cyan)),
+                        ));
+                      }),
+                      const SizedBox(height: 28),
+                      Text(_listening ? 'I’M LISTENING' : _thinking ? 'PROCESSING' : 'HI, I’M SERI', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3, color: Colors.white)),
+                      const SizedBox(height: 9),
+                      Text(_heard.isNotEmpty ? _heard : 'Say a command. I’m ready.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+                      const SizedBox(height: 22),
+                      SizedBox(width: double.infinity, child: FilledButton.icon(
+                        onPressed: () { setState(() { _wakeHubVisible = false; }); if (!_listening && !_thinking) _listen(); },
+                        icon: Icon(_listening ? Icons.graphic_eq_rounded : Icons.mic_rounded),
+                        label: Text(_listening ? 'MICROPHONE ACTIVE' : 'TAP TO SPEAK'),
+                        style: FilledButton.styleFrom(backgroundColor: cyan, foregroundColor: const Color(0xFF03101E), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+                      )),
+                      const SizedBox(height: 12),
+                      const Text('LIQUID GLASS  •  PERSONAL AI CORE', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1.7)),
+                    ]),
+                  ),
+                ))),
+              ]),
+            ),
+          ),
+        ),
     ]),
   );
 }
