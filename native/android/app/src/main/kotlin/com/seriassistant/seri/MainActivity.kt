@@ -1,6 +1,10 @@
 package com.seriassistant.seri
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.Manifest
+import android.database.Cursor
+import android.provider.ContactsContract
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -18,6 +22,9 @@ class MainActivity : FlutterActivity() {
     private var flutterReady = false
     private var pendingAssistantInvocation = false
     private var pendingWakeDetected = false
+    private var pendingCallName: String? = null
+    private var pendingCallResult: MethodChannel.Result? = null
+    private val callPermissionRequestCode = 7412
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -28,6 +35,19 @@ class MainActivity : FlutterActivity() {
                     flutterReady = true
                     result.success(true)
                     dispatchPendingInvocation()
+                }
+                "callContact" -> {
+                    val contactName = call.argument<String>("name")?.trim().orEmpty()
+                    if (contactName.isBlank()) {
+                        result.error("MISSING_CONTACT", "Say who you want to call.", null)
+                    } else if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED ||
+                        checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                        pendingCallName = contactName
+                        pendingCallResult = result
+                        requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), callPermissionRequestCode)
+                    } else {
+                        callSavedContact(contactName, result)
+                    }
                 }
                 "start" -> {
                     try {
@@ -226,6 +246,58 @@ class MainActivity : FlutterActivity() {
             }
         }
         notifyIfWakeDetected(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == callPermissionRequestCode) {
+            val name = pendingCallName
+            val result = pendingCallResult
+            pendingCallName = null
+            pendingCallResult = null
+            if (name == null || result == null) return
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                callSavedContact(name, result)
+            } else {
+                result.success(false)
+            }
+        }
+    }
+
+    private fun callSavedContact(requestedName: String, result: MethodChannel.Result) {
+        try {
+            val normalized = requestedName.lowercase().replace(Regex("[^a-z0-9]"), "")
+            val aliases = when (normalized) {
+                "mum", "mom", "mummy", "mommy", "mother" -> setOf("mum", "mom", "mummy", "mommy", "mother", "mama", "mam")
+                "dad", "daddy", "father" -> setOf("dad", "daddy", "father", "papa")
+                else -> setOf(normalized)
+            }
+            var matchedNumber: String? = null
+            val cursor: Cursor? = contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                null, null, null
+            )
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val display = it.getString(0) ?: continue
+                    val number = it.getString(1) ?: continue
+                    val clean = display.lowercase().replace(Regex("[^a-z0-9]"), "")
+                    if (clean in aliases || aliases.any { alias -> alias.length >= 3 && clean.contains(alias) }) {
+                        matchedNumber = number
+                        break
+                    }
+                }
+            }
+            if (matchedNumber.isNullOrBlank()) {
+                result.success(false)
+                return
+            }
+            startActivity(Intent(Intent.ACTION_CALL, android.net.Uri.fromParts("tel", matchedNumber, null)))
+            result.success(true)
+        } catch (error: Exception) {
+            result.error("CALL_CONTACT_FAILED", error.message, null)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
