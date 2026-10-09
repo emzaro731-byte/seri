@@ -11,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 void main() => runApp(const SeriApp());
 
 const bg = Color(0xFF030712);
-const navy = Color(0xFF07152B);
 const cyan = Color(0xFF8BE9FF);
 const panel = Color(0xB80B1730);
 const glassBorder = Color(0x387DE4FF);
