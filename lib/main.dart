@@ -86,12 +86,18 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   }
 
   Future<void> _handleNativeCall(MethodCall call) async {
-    if (call.method == 'wakeDetected' && _wakeWordMode && mounted) {
-      _awaitingWakeCommand = true;
-      setState(() { _heard = ''; _status = 'SERI ACTIVATED • LISTENING'; _wakeHubVisible = true; });
-      await Future.delayed(const Duration(milliseconds: 350));
-      if (mounted && !_listening && !_thinking) await _listen();
-    }
+    final fromWakeWord = call.method == 'wakeDetected';
+    final fromDefaultAssistant = call.method == 'assistantInvoked';
+    if ((!fromWakeWord && !fromDefaultAssistant) || !mounted) return;
+    if (fromWakeWord && !_wakeWordMode) return;
+    _awaitingWakeCommand = true;
+    setState(() {
+      _heard = '';
+      _status = fromDefaultAssistant ? 'SERI ASSISTANT ACTIVATED' : 'SERI ACTIVATED • LISTENING';
+      _wakeHubVisible = true;
+    });
+    await Future.delayed(const Duration(milliseconds: 450));
+    if (mounted && !_listening && !_thinking) await _listen();
   }
 
   @override
