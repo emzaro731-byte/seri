@@ -262,7 +262,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     }
     if (q.contains('weather')) {
       final place = q.replaceFirst(RegExp(r'.*weather(?:\s+in)?\s*'), '').trim();
-      await _open('https://www.google.com/search?q=${Uri.encodeComponent('weather ${place.isEmpty ? 'today' : 'in $place')}')}');
+      final weatherQuery = place.isEmpty ? 'weather today' : 'weather in $place';
+      await _open('https://www.google.com/search?q=${Uri.encodeComponent(weatherQuery)}');
       return 'Searching for the latest weather information.';
     }
     if (q.startsWith('search for ') || q.startsWith('google ')) {
