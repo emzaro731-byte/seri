@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const SeriApp());
@@ -48,6 +49,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   late final AnimationController _pulse;
   bool _ready = false, _listening = false, _thinking = false, _speaking = false;
   bool _voiceReplies = true;
+  bool _wakeWordMode = false;
+  bool _wakeRestartPending = false;
   String _status = 'READY WHEN YOU ARE';
   String _endpoint = const String.fromEnvironment('SERI_API_URL');
   String _heard = '';
@@ -56,7 +59,27 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     super.initState();
     _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
     _messages.add(ChatItem('Systems online. I’m Seri, your personal assistant. Ask me a question or try one of the quick actions below.', false));
+    _loadSettings();
     _setupVoice();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _endpoint = prefs.getString('seri_endpoint') ?? _endpoint;
+        _voiceReplies = prefs.getBool('seri_voice_replies') ?? true;
+        _wakeWordMode = prefs.getBool('seri_wake_word') ?? false;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('seri_endpoint', _endpoint);
+    await prefs.setBool('seri_voice_replies', _voiceReplies);
+    await prefs.setBool('seri_wake_word', _wakeWordMode);
   }
 
   Future<void> _setupVoice() async {
@@ -113,7 +136,29 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
           _input.text = _heard;
           _input.selection = TextSelection.collapsed(offset: _input.text.length);
         });
-        if (result.finalResult && _heard.trim().isNotEmpty) _send(_heard);
+        if (result.finalResult && _heard.trim().isNotEmpty) {
+          final heard = _heard.trim();
+          if (_wakeWordMode) {
+            final wake = RegExp(r'\\b(?:hey|hi|hello)\\s+seri\\b', caseSensitive: false).firstMatch(heard);
+            if (wake != null) {
+              final command = heard.substring(wake.end).trim().replaceFirst(RegExp(r'^[,.:;\\s]+'), '');
+              if (command.isNotEmpty) {
+                _send(command);
+              } else {
+                _speak('I’m listening.');
+                Future.delayed(const Duration(milliseconds: 900), () {
+                  if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
+                });
+              }
+            } else {
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
+              });
+            }
+          } else {
+            _send(heard);
+          }
+        }
       },
     );
   }
@@ -135,6 +180,11 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     _add(false, reply);
     if (mounted) setState(() { _thinking = false; _status = 'READY WHEN YOU ARE'; });
     if (_voiceReplies) await _speak(reply);
+    if (mounted && _wakeWordMode && !_listening) {
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (mounted && _wakeWordMode && !_thinking && !_listening) _listen();
+      });
+    }
   }
 
   Future<String?> _command(String input) async {
@@ -146,6 +196,21 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
       const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
       return 'Today is ${days[n.weekday - 1]}, ${months[n.month - 1]} ${n.day}, ${n.year}.';
+    }
+    if (q.startsWith('call ')) {
+      final target = input.trim().substring(5).trim();
+      final number = target.replaceAll(RegExp(r'[^0-9+*#,;]'), '');
+      if (number.isEmpty) return 'Please say “call” followed by a phone number. I will open the dialer so you can confirm the call.';
+      await _open('tel:$number');
+      return 'I opened your phone dialer for $number. Review the number and tap call when you are ready.';
+    }
+    if (q.startsWith('text ') || q.startsWith('send sms to ')) {
+      final raw = input.trim();
+      final number = q.startsWith('send sms to ') ? raw.substring(12).trim() : raw.substring(5).trim();
+      final recipient = number.replaceAll(RegExp(r'[^0-9+*#,;]'), '');
+      if (recipient.isEmpty) return 'Please provide a phone number after “text” or “send SMS to”.';
+      await _open('sms:$recipient');
+      return 'I opened your SMS composer for $recipient. Type your message and send it yourself.';
     }
     if (q.contains('open youtube')) { await _open('https://youtube.com'); return 'Opening YouTube.'; }
     if (q.contains('open google')) { await _open('https://google.com'); return 'Opening Google.'; }
@@ -214,6 +279,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   void _showSettings() {
     final controller = TextEditingController(text: _endpoint);
     var voice = _voiceReplies;
+    var wakeWord = _wakeWordMode;
     showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: panel, builder: (ctx) => StatefulBuilder(builder: (ctx, modalSet) => Padding(
       padding: EdgeInsets.fromLTRB(22, 22, 22, MediaQuery.of(ctx).viewInsets.bottom + 26),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -223,11 +289,13 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const SizedBox(height: 16),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Hey Seri wake phrase'), subtitle: const Text('Foreground only: keep Seri open and tap the mic to listen. Not background listening.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
         const SizedBox(height: 10),
         SizedBox(width: double.infinity, child: FilledButton(onPressed: () {
-          setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; });
+          setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; _wakeWordMode = wakeWord; });
+          _saveSettings();
           Navigator.pop(ctx);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seri settings saved')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_wakeWordMode ? 'Settings saved. Tap the mic, then say “Hey Seri”.' : 'Seri settings saved')));
         }, child: const Text('SAVE SETTINGS'))),
       ]),
     )));
