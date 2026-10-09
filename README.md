@@ -34,7 +34,7 @@ flutter build apk --release
 The API provides `GET /`, `GET /health`, and `POST /chat`. The chat endpoint accepts JSON such as `{"message":"Hello Seri","history":[]}` and returns `{"reply":"..." }`. The provider key is stored on the server, not in the Android app.
 
 ## Visual understanding and reminders
-Image analysis sends the selected image and question to your configured Seri AI backend. The default vision model is set by `GROQ_VISION_MODEL` (default `meta-llama/llama-4-scout-17b-16e-instruct`); if your provider account does not support it, set `GROQ_VISION_MODEL` to a compatible vision model in the Render environment. Images are not saved as Seri memories. Memories are saved locally only when you explicitly say “remember that …”.
+Image analysis sends the selected image and question to your configured Seri AI backend. The default vision model is set by `GROQ_VISION_MODEL` (default `meta-llama/llama-4-scout-17b-16e-instruct`); if your provider account does not support it, set `GROQ_VISION_MODEL` to a compatible vision model in the Render environment. Images are not saved as Seri memories. Memories are saved locally only when you explicitly say “remember that …”; when an AI endpoint is configured, those saved memories are included in AI requests to provide continuity, so do not save secrets or sensitive information.
 
 Reminder and calendar commands open Android Clock or the installed calendar app so you can review and confirm. Examples: “remind me to study in 20 minutes”, “remind me to call Mum at 7 pm”, or “add calendar event Study tomorrow at 3 pm”. Android may require an installed compatible app, and these intents do not silently grant permissions or save events without your confirmation.
 
