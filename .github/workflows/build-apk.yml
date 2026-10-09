@@ -1,0 +1,59 @@
+name: Build Seri Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android project files
+        run: |
+          flutter create --platforms=android --project-name seri --org com.seriassistant /tmp/seri_template
+          cp -R /tmp/seri_template/android ./android
+      - name: Add Android permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          marker = '<manifest'
+          i = s.find('>', s.find(marker))
+          permissions = '    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
+          if 'android.permission.INTERNET' not in s:
+              s = s[:i+1] + '\n' + permissions + s[i+1:]
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Build release APK
+        run: flutter build apk --release
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: seri-android-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
