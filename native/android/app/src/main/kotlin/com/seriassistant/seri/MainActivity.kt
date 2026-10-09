@@ -56,6 +56,36 @@ class MainActivity : FlutterActivity() {
                         result.error("BATTERY_SETTINGS_FAILED", error.message, null)
                     }
                 }
+                "openApp" -> {
+                    try {
+                        val requested = (call.argument<String>("name") ?: "").trim()
+                        if (requested.isBlank()) {
+                            result.success(false)
+                        } else {
+                            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                            val activities = packageManager.queryIntentActivities(launcherIntent, 0)
+                            val wanted = requested.lowercase().removePrefix("the ").trim()
+                            val match = activities.firstOrNull {
+                                it.loadLabel(packageManager).toString().trim().lowercase() == wanted
+                            } ?: activities.firstOrNull {
+                                val label = it.loadLabel(packageManager).toString().trim().lowercase()
+                                label.contains(wanted) || wanted.contains(label)
+                            }
+                            val launchIntent = match?.activityInfo?.let {
+                                packageManager.getLaunchIntentForPackage(it.packageName)
+                            }
+                            if (launchIntent != null) {
+                                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(launchIntent)
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        }
+                    } catch (error: Exception) {
+                        result.error("OPEN_APP_FAILED", error.message, null)
+                    }
+                }
                 "openSystemSettings" -> {
                     try {
                         val target = call.argument<String>("target") ?: "main"
