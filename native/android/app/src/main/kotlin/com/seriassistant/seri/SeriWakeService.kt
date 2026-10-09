@@ -104,7 +104,7 @@ class SeriWakeService : Service() {
 
     private fun checkWakePhrase(bundle: Bundle?): Boolean {
         val matches = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return false
-        val wakePattern = Regex("\\\\b(?:hey|hi|hello)\\\\s+seri\\\\b", RegexOption.IGNORE_CASE)
+        val wakePattern = Regex("\\b(?:hey|hi|hello)\\s+seri\\b", RegexOption.IGNORE_CASE)
         if (matches.none { wakePattern.containsMatchIn(it) }) return false
         triggered = true
         try { recognizer?.cancel() } catch (_: Exception) { }
