@@ -587,6 +587,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       'message': prompt,
       'text': prompt,
       'history': history.map((m) => {'role': m.user ? 'user' : 'assistant', 'content': m.text}).toList(),
+      'memories': _memories,
     };
     if (imageBase64 != null) {
       payload['image_base64'] = imageBase64;
