@@ -96,7 +96,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_wakeWordMode) return;
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
       if (_listening) _speech.stop();
       _startWakeService();
     }
