@@ -56,6 +56,50 @@ class MainActivity : FlutterActivity() {
                         result.error("BATTERY_SETTINGS_FAILED", error.message, null)
                     }
                 }
+                "setTimer" -> {
+                    try {
+                        val seconds = call.argument<Int>("seconds") ?: 0
+                        val label = call.argument<String>("label") ?: "Seri timer"
+                        if (seconds <= 0) {
+                            result.success(false)
+                        } else {
+                            val timerIntent = Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
+                                putExtra(android.provider.AlarmClock.EXTRA_LENGTH, seconds)
+                                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, label)
+                                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+                            }
+                            if (timerIntent.resolveActivity(packageManager) != null) {
+                                startActivity(timerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                result.success(true)
+                            } else result.success(false)
+                        }
+                    } catch (error: Exception) {
+                        result.error("SET_TIMER_FAILED", error.message, null)
+                    }
+                }
+                "setAlarm" -> {
+                    try {
+                        val hour = call.argument<Int>("hour") ?: -1
+                        val minute = call.argument<Int>("minute") ?: 0
+                        val label = call.argument<String>("label") ?: "Seri alarm"
+                        if (hour !in 0..23 || minute !in 0..59) {
+                            result.success(false)
+                        } else {
+                            val alarmIntent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                                putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                                putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, label)
+                                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+                            }
+                            if (alarmIntent.resolveActivity(packageManager) != null) {
+                                startActivity(alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                result.success(true)
+                            } else result.success(false)
+                        }
+                    } catch (error: Exception) {
+                        result.error("SET_ALARM_FAILED", error.message, null)
+                    }
+                }
                 "openApp" -> {
                     try {
                         val requested = (call.argument<String>("name") ?: "").trim()
