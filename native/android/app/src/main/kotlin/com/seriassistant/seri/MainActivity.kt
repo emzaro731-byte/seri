@@ -190,6 +190,14 @@ class MainActivity : FlutterActivity() {
                             "display" -> Settings.ACTION_DISPLAY_SETTINGS
                             "notifications" -> Settings.ACTION_NOTIFICATION_SETTINGS
                             "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+                            "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+                            "sound" -> Settings.ACTION_SOUND_SETTINGS
+                            "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
+                            "privacy" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Settings.ACTION_PRIVACY_SETTINGS else Settings.ACTION_SETTINGS
+                            "date_time" -> Settings.ACTION_DATE_SETTINGS
+                            "default_apps" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS else Settings.ACTION_SETTINGS
+                            "storage" -> Settings.ACTION_INTERNAL_STORAGE_SETTINGS
+                            "security" -> Settings.ACTION_SECURITY_SETTINGS
                             "app" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                             "battery_app" -> Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                             else -> Settings.ACTION_SETTINGS
