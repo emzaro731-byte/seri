@@ -5,10 +5,12 @@ Seri is a Flutter Android voice assistant with speech recognition, spoken replie
 ## Android app
 The Flutter app includes:
 - Voice input and text chat
+- Optional foreground-only “Hey Seri” wake phrase mode (requires tapping the microphone first; no background listening)
+- Call and SMS shortcuts that open the Android dialer/message composer for user confirmation
 - Spoken responses with a voice-reply toggle
 - Quick actions for time, date, Google/YouTube/WhatsApp/Gmail, web search, weather search, and Maps
 - Chat history on screen, copy-message buttons, and clear-chat controls
-- Optional AI endpoint setting
+- Optional AI endpoint setting, saved preferences, and voice controls
 
 ## Build Android APK
 Open **Actions** in this repository and select **Build Seri Android APK**. When the workflow succeeds, download the `seri-android-release` artifact.
@@ -41,6 +43,7 @@ The Android manifest needs internet and microphone permissions. The GitHub Actio
 
 ## Notes
 - Voice recognition depends on Android's installed speech services.
-- Seri listens only when you tap the microphone; it does not continuously record in the background.
+- Wake phrase mode is foreground-only and starts only after you tap the microphone. Android speech recognition can time out or vary by device; this is not an always-on background hotword service.
+- Call and SMS commands open the dialer or composer; Seri does not place calls or send messages automatically.
 - A Render free service may sleep when idle and take time to wake up.
 - Never store API keys in Flutter code, GitHub commits, or the APK.
