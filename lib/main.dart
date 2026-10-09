@@ -666,14 +666,14 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
             opacity: _wakeHubVisible ? 1 : 0,
             duration: const Duration(milliseconds: 260),
             child: Container(
-              color: const Color(0xE802050D),
+              color: const Color(0x8802050D),
               child: Stack(children: [
                 Positioned(top: -90, left: -60, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [const Color(0xFF174C83).withValues(alpha: .32), Colors.transparent])))),
                 Positioned(bottom: -70, right: -70, child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withValues(alpha: .18), Colors.transparent])))),
                 SafeArea(child: Center(child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                   child: _glass(
-                    padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                     borderRadius: BorderRadius.circular(34),
                     tint: const Color(0xD9091428),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -683,24 +683,24 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
                         const Expanded(child: Text('S E R I  //  L I V E', style: TextStyle(letterSpacing: 2.2, fontWeight: FontWeight.w800, fontSize: 12))),
                         IconButton(onPressed: () => setState(() => _wakeHubVisible = false), icon: const Icon(Icons.close_rounded, color: Colors.white70)),
                       ]),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
                       AnimatedBuilder(animation: _pulse, builder: (_, __) {
                         final pulse = 1 + _pulse.value * .09;
                         return Transform.scale(scale: pulse, child: Container(
-                          width: 174, height: 174,
+                          width: 126, height: 126,
                           decoration: BoxDecoration(shape: BoxShape.circle,
                             gradient: RadialGradient(colors: [cyan.withValues(alpha: .26), const Color(0xFF0C2850), const Color(0xFF030713)], stops: const [0, .55, 1]),
                             border: Border.all(color: cyan.withValues(alpha: .75), width: 1.5),
                             boxShadow: [BoxShadow(color: cyan.withValues(alpha: .32), blurRadius: 42, spreadRadius: 5), BoxShadow(color: const Color(0xFF2D65B7).withValues(alpha: .18), blurRadius: 65, spreadRadius: 12)],
                           ),
-                          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: .20)), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .12), const Color(0xFF020714).withValues(alpha: .82)])), child: Icon(_listening ? Icons.graphic_eq_rounded : Icons.auto_awesome_rounded, size: 62, color: cyan)),
+                          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: .20)), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: .12), const Color(0xFF020714).withValues(alpha: .82)])), child: Icon(_listening ? Icons.graphic_eq_rounded : Icons.auto_awesome_rounded, size: 46, color: cyan)),
                         ));
                       }),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 18),
                       Text(_listening ? 'I’M LISTENING' : _thinking ? 'PROCESSING' : 'HI, I’M SERI', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3, color: Colors.white)),
                       const SizedBox(height: 9),
                       Text(_heard.isNotEmpty ? _heard : 'Say a command. I’m ready.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 16),
                       SizedBox(width: double.infinity, child: FilledButton.icon(
                         onPressed: () { setState(() { _wakeHubVisible = false; }); if (!_listening && !_thinking) _listen(); },
                         icon: Icon(_listening ? Icons.graphic_eq_rounded : Icons.mic_rounded),
@@ -718,42 +718,6 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         ),
     ]),
   );
-}
-, caseSensitive: false).hasMatch(websiteTarget);
-      if (looksLikeUrl) {
-        final normalized = websiteTarget.startsWith(RegExp(r'https?://', caseSensitive: false))
-            ? websiteTarget : 'https://${websiteTarget}';
-        await _open(normalized);
-        return 'Opening ${websiteTarget}.';
-      }
-    }
-    if (q.startsWith('navigate to ') || q.startsWith('directions to ')) {
-      final place = q.replaceFirst(RegExp(r'^(navigate to|directions to)\s+'), '');
-      await _open('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place)}');
-      return 'Opening directions for $place.';
-    }
-    if (q.contains('weather')) {
-      final place = q.replaceFirst(RegExp(r'.*weather(?:\s+in)?\s*'), '').trim();
-      final weatherQuery = place.isEmpty ? 'weather today' : 'weather in $place';
-      await _open('https://www.google.com/search?q=${Uri.encodeComponent(weatherQuery)}');
-      return 'Searching for the latest weather information.';
-    }
-    if (q.startsWith('search for ') || q.startsWith('google ')) {
-      final term = q.replaceFirst(RegExp(r'^(search for|google)\s+'), '');
-      await _open('https://www.google.com/search?q=${Uri.encodeComponent(term)}');
-      return 'Searching the web for $term.';
-    }
-    if (q.contains('stop talking') || q == 'stop speaking' || q == 'be quiet') {
-      await _tts.stop();
-      return 'Okay. I’ve stopped speaking.';
-    }
-    if (q.contains('thank you')) return 'You’re welcome. I’m always happy to help.';
-    if (q == 'clear chat' || q == 'clear conversation') {
-      setState(() { _messages.clear(); _messages.add(ChatItem('Conversation cleared. What would you like to do next?', false)); });
-      return 'I cleared the conversation.';
-    }
-    return null;
-  }
 
   Future<String> _askAI(String prompt) async {
     if (_endpoint.trim().isEmpty) {
