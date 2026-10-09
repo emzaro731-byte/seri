@@ -261,9 +261,24 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (mounted && _wakeWordMode && !_listening) _scheduleWakeListen(900);
   }
 
+  Future<void> _openDeviceSettings(String target) async {
+    try {
+      await _alwaysOnChannel.invokeMethod<void>('openSystemSettings', {'target': target});
+    } on PlatformException catch (e) {
+      if (mounted) _add(false, 'Android could not open that settings screen: ${e.message ?? 'Unknown error'}.');
+    }
+  }
+
   Future<String?> _command(String input) async {
     final q = input.toLowerCase().trim();
     if (q == 'hi' || q == 'hello' || q.contains('who are you')) return 'I’m Seri, your personal AI assistant. I can chat, speak replies, search the web, open websites, and help with everyday tasks.';
+    if (q.contains('open wifi settings') || q.contains('open wi-fi settings')) { await _openDeviceSettings('wifi'); return 'Opening Wi-Fi settings. You can choose your network there.'; }
+    if (q.contains('open bluetooth settings') || q.contains('open bluetooth')) { await _openDeviceSettings('bluetooth'); return 'Opening Bluetooth settings.'; }
+    if (q.contains('open display settings')) { await _openDeviceSettings('display'); return 'Opening display settings.'; }
+    if (q.contains('open notification settings')) { await _openDeviceSettings('notifications'); return 'Opening notification settings.'; }
+    if (q.contains('open battery settings')) { await _openDeviceSettings('battery'); return 'Opening battery settings.'; }
+    if (q.contains('open app settings')) { await _openDeviceSettings('app'); return 'Opening Seri app settings.'; }
+    if (q.contains('open phone settings') || q == 'open settings' || q == 'settings') { await _openDeviceSettings('main'); return 'Opening your phone settings.'; }
     if (q.contains('what time') || q == 'time' || q == 'tell me the time') return 'It is ${TimeOfDay.now().format(context)}.';
     if (q.contains('what date') || q.contains("today's date") || q.contains('what day')) {
       final n = DateTime.now();
