@@ -73,9 +73,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         _wakeWordMode = prefs.getBool('seri_wake_word') ?? false;
       });
       if (_wakeWordMode && mounted) {
+        await _listen();
         await _startWakeService();
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted && !_listening) _listen();
       }
     } catch (_) {}
   }
@@ -120,7 +119,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
           });
           if (_wakeWordMode && (s == 'done' || s == 'notListening')) _scheduleWakeListen(1200);
         },
-        onError: (_) { if (mounted) setState(() { _listening = false; _status = 'VOICE SERVICE UNAVAILABLE'; }); },
+        onError: (_) {
+          if (mounted) setState(() { _listening = false; _status = _wakeWordMode ? 'RESTARTING VOICE SERVICE' : 'VOICE SERVICE UNAVAILABLE'; });
+          if (_wakeWordMode) _scheduleWakeListen(1800);
+        },
       );
       await _tts.setLanguage('en-US');
       await _tts.setSpeechRate(0.46);
@@ -317,14 +319,14 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
         const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: FilledButton(onPressed: () {
+        SizedBox(width: double.infinity, child: FilledButton(onPressed: () async {
           final wasWakeEnabled = _wakeWordMode;
           setState(() { _endpoint = controller.text.trim(); _voiceReplies = voice; _wakeWordMode = wakeWord; });
           _saveSettings();
           Navigator.pop(ctx);
           if (_wakeWordMode) {
-            await _startWakeService();
             if (!_listening) await _listen();
+            await _startWakeService();
           } else if (wasWakeEnabled) {
             await _stopWakeService();
           }
