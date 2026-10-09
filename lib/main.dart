@@ -347,6 +347,13 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     if (websiteTarget != null && websiteTarget.isNotEmpty) {
       final looksLikeUrl = websiteTarget.startsWith(RegExp(r'https?://', caseSensitive: false)) ||
           RegExp(r'^(?:www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::[0-9]+)?(?:/.*)?$', caseSensitive: false).hasMatch(websiteTarget);
+      if (looksLikeUrl) {
+        final normalized = websiteTarget.startsWith(RegExp(r'https?://', caseSensitive: false))
+            ? websiteTarget : 'https://' + websiteTarget;
+        await _open(normalized);
+        return 'Opening ' + websiteTarget + '.';
+      }
+    }
     if (q.startsWith('navigate to ') || q.startsWith('directions to ')) {
       final place = q.replaceFirst(RegExp(r'^(navigate to|directions to)\s+'), '');
       await _open('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place)}');
