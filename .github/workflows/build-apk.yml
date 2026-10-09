@@ -48,6 +48,8 @@ jobs:
           from pathlib import Path
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
+          if 'android.speech.RecognitionService' not in s:
+              s = s.replace('</manifest>', '    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>\\n</manifest>')
           marker = '<manifest'
           i = s.find('>', s.find(marker))
           permissions = [
