@@ -132,9 +132,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun notifyIfWakeDetected(source: Intent?) {
-        val wakeIntent = source ?: return
-        if (!wakeIntent.getBooleanExtra("seri_wake_detected", false)) return
-        wakeIntent.removeExtra("seri_wake_detected")
-        Handler(Looper.getMainLooper()).postDelayed({ seriChannel?.invokeMethod("wakeDetected", null) }, 500)
+        val launchIntent = source ?: return
+        val assistantInvoked = launchIntent.getBooleanExtra("seri_assistant_invoked", false)
+        val wakeDetected = launchIntent.getBooleanExtra("seri_wake_detected", false)
+        if (!assistantInvoked && !wakeDetected) return
+        launchIntent.removeExtra("seri_assistant_invoked")
+        launchIntent.removeExtra("seri_wake_detected")
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (assistantInvoked) seriChannel?.invokeMethod("assistantInvoked", null)
+            else if (wakeDetected) seriChannel?.invokeMethod("wakeDetected", null)
+        }, 650)
     }
 }
