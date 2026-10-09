@@ -422,6 +422,20 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
           icon: const Icon(Icons.assistant_rounded),
           label: const Text('SET SERI AS DEFAULT ASSISTANT'),
         )),
+        const SizedBox(height: 14),
+        const Text('PHONE CONNECTIONS', style: TextStyle(color: cyan, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.4)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(onPressed: () => _openDeviceSettings('wifi'), icon: const Icon(Icons.wifi_rounded), label: const Text('Wi-Fi')),
+          OutlinedButton.icon(onPressed: () => _openDeviceSettings('bluetooth'), icon: const Icon(Icons.bluetooth_rounded), label: const Text('Bluetooth')),
+          OutlinedButton.icon(onPressed: () => _openDeviceSettings('display'), icon: const Icon(Icons.brightness_6_rounded), label: const Text('Display')),
+          OutlinedButton.icon(onPressed: () => _openDeviceSettings('notifications'), icon: const Icon(Icons.notifications_active_rounded), label: const Text('Notifications')),
+          OutlinedButton.icon(onPressed: () => _openDeviceSettings('battery'), icon: const Icon(Icons.battery_charging_full_rounded), label: const Text('Battery')),
+        ]),
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 6),
+          child: Text('These buttons open Android settings for you to review and change. Android requires your approval for sensitive access; Seri cannot silently grant every permission or bypass system restrictions.', style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4)),
+        ),
         const Padding(
           padding: EdgeInsets.only(top: 5, bottom: 10),
           child: Text('Android will ask you to confirm. Seri cannot change this setting silently.', style: TextStyle(color: Colors.white54, fontSize: 11)),
