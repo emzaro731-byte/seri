@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'lib/**'
+      - 'native/**'
+      - 'README.md'
       - 'pubspec.yaml'
       - '.github/workflows/build-apk.yml'
 
@@ -32,6 +34,9 @@ jobs:
         run: |
           flutter create --platforms=android --project-name seri --org com.seriassistant /tmp/seri_template
           cp -R /tmp/seri_template/android ./android
+          mkdir -p android/app/src/main/kotlin/com/seriassistant/seri
+          cp native/android/app/src/main/kotlin/com/seriassistant/seri/MainActivity.kt android/app/src/main/kotlin/com/seriassistant/seri/MainActivity.kt
+          cp native/android/app/src/main/kotlin/com/seriassistant/seri/SeriWakeService.kt android/app/src/main/kotlin/com/seriassistant/seri/SeriWakeService.kt
       - name: Add Android permissions
         run: |
           python3 - <<'PY'
@@ -40,9 +45,21 @@ jobs:
           s = p.read_text()
           marker = '<manifest'
           i = s.find('>', s.find(marker))
-          permissions = '    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
-          if 'android.permission.INTERNET' not in s:
-              s = s[:i+1] + '\n' + permissions + s[i+1:]
+          permissions = [
+              '    <uses-permission android:name="android.permission.INTERNET"/>',
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>',
+              '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>',
+              '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>',
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
+          ]
+          for permission in permissions:
+              name = permission.split('name="', 1)[1].split('"', 1)[0]
+              if name not in s:
+                  i = s.find('>', s.find('<manifest'))
+                  s = s[:i+1] + '\\n' + permission + s[i+1:]
+          service = '        <service android:name=".SeriWakeService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false" />'
+          if 'android:name=".SeriWakeService"' not in s:
+              s = s.replace('</application>', service + '\\n    </application>')
           p.write_text(s)
           PY
       - name: Install dependencies
