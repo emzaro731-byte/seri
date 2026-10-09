@@ -71,7 +71,7 @@ jobs:
           for service in services:
               name = service.split('android:name="', 1)[1].split('"', 1)[0]
               if name not in s:
-                  s = s.replace('</application>', service + '\\n    </application>')
+                  s = s.replace('</application>', service + '\n    </application>')
           p.write_text(s)
           PY
       - name: Install dependencies
