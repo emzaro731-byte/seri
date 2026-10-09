@@ -171,8 +171,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     await _tts.stop();
     setState(() { _heard = ''; _status = 'LISTENING TO YOU'; });
     await _speech.listen(
-      listenFor: const Duration(seconds: 35),
-      pauseFor: const Duration(seconds: 4),
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(seconds: 35),
+        pauseFor: const Duration(seconds: 4),
+      ),
       onResult: (result) {
         if (!mounted) return;
         setState(() {
@@ -325,8 +327,8 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const Text('Connect your own AI chat backend. Never put secret provider API keys inside the app.', style: TextStyle(color: Colors.white60, height: 1.4)),
         const SizedBox(height: 16),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeThumbColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeThumbColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
         const SizedBox(height: 10),
         SizedBox(width: double.infinity, child: FilledButton(onPressed: () async {
           final wasWakeEnabled = _wakeWordMode;
