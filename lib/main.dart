@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -9,9 +10,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 void main() => runApp(const SeriApp());
 
-const bg = Color(0xFF060914);
-const cyan = Color(0xFF63E9FF);
-const panel = Color(0xFF10182A);
+const bg = Color(0xFF030712);
+const navy = Color(0xFF07152B);
+const cyan = Color(0xFF8BE9FF);
+const panel = Color(0xB80B1730);
+const glassBorder = Color(0x387DE4FF);
 const _alwaysOnChannel = MethodChannel('com.seriassistant.seri/always_on');
 
 class SeriApp extends StatelessWidget {
@@ -19,11 +22,14 @@ class SeriApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Seri AI', debugShowCheckedModeBanner: false,
-    theme: ThemeData.dark().copyWith(
-      scaffoldBackgroundColor: bg,
-      colorScheme: const ColorScheme.dark(primary: cyan, surface: panel),
-      appBarTheme: const AppBarTheme(backgroundColor: bg, foregroundColor: Colors.white),
+    theme: ThemeData(
+      brightness: Brightness.dark,
       useMaterial3: true,
+      scaffoldBackgroundColor: bg,
+      colorScheme: const ColorScheme.dark(primary: cyan, secondary: Color(0xFF4269A5), surface: panel),
+      appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, foregroundColor: Colors.white, elevation: 0, centerTitle: false),
+      snackBarTheme: const SnackBarThemeData(backgroundColor: Color(0xFF10233E), contentTextStyle: TextStyle(color: Colors.white)),
+      inputDecorationTheme: const InputDecorationTheme(filled: false),
     ),
     home: const AssistantHome(),
   );
@@ -339,11 +345,28 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     )));
   }
 
+  Widget _glass({required Widget child, EdgeInsetsGeometry padding = const EdgeInsets.all(12), BorderRadius borderRadius = const BorderRadius.all(Radius.circular(20)), Color tint = const Color(0xA60B1931)}) => ClipRRect(
+    borderRadius: borderRadius,
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: tint,
+          borderRadius: borderRadius,
+          border: Border.all(color: glassBorder, width: 1),
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withOpacity(.095), const Color(0xFF10294A).withOpacity(.40), const Color(0xFF050B18).withOpacity(.75)]),
+          boxShadow: [BoxShadow(color: cyan.withOpacity(.055), blurRadius: 24, spreadRadius: 1)],
+        ),
+        child: child,
+      ),
+    ),
+  );
+
   Widget _quickAction(IconData icon, String label, String prompt) => InkWell(
     borderRadius: BorderRadius.circular(14), onTap: () => _send(prompt),
     child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14), border: Border.all(color: cyan.withOpacity(.13))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: cyan, size: 16), const SizedBox(width: 7), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))])),
+      child: _glass(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11), borderRadius: BorderRadius.circular(14), tint: const Color(0xA6091930), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: cyan, size: 16), const SizedBox(width: 7), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))]))),
   );
 
   @override Widget build(BuildContext context) => Scaffold(
@@ -361,15 +384,20 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         IconButton(tooltip: 'Settings', onPressed: _showSettings, icon: const Icon(Icons.tune_rounded)),
         const SizedBox(width: 4),
       ]),
-    body: SafeArea(child: Column(children: [
+    body: Stack(children: [
+      Positioned.fill(child: DecoratedBox(decoration: const BoxDecoration(gradient: RadialGradient(center: Alignment(-.75, -.85), radius: 1.35, colors: [Color(0xFF142D50), bg, Color(0xFF02040A)], stops: [0, .48, 1])))),
+      Positioned(top: -90, right: -90, child: IgnorePointer(child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [const Color(0xFF2D70B8).withOpacity(.24), Colors.transparent]))))),
+      Positioned(bottom: 70, left: -110, child: IgnorePointer(child: Container(width: 280, height: 280, decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [cyan.withOpacity(.075), Colors.transparent]))))),
+      SafeArea(child: Column(children: [
       SizedBox(height: 184, child: Center(child: AnimatedBuilder(animation: _pulse, builder: (_, __) {
         final scale = 0.95 + _pulse.value * 0.055;
         return Transform.scale(scale: scale, child: Container(width: 156, height: 156,
           decoration: BoxDecoration(shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [cyan.withOpacity(_listening ? .26 : .12), const Color(0xFF14263D), bg], stops: const [0, .56, 1]),
-            boxShadow: [BoxShadow(color: cyan.withOpacity(_listening ? .32 : .12), blurRadius: 34, spreadRadius: 3)]),
-          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: cyan.withOpacity(.65), width: 1.4)),
-            child: Container(margin: const EdgeInsets.all(10), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF0A1323), border: Border.all(color: cyan.withOpacity(.24))),
+            gradient: RadialGradient(colors: [cyan.withOpacity(_listening ? .30 : .14), const Color(0xFF102B4E), bg], stops: const [0, .56, 1]),
+            border: Border.all(color: Colors.white.withOpacity(.14), width: 1),
+            boxShadow: [BoxShadow(color: cyan.withOpacity(_listening ? .35 : .15), blurRadius: 38, spreadRadius: 2), BoxShadow(color: const Color(0xFF3D74C2).withOpacity(.15), blurRadius: 60, spreadRadius: 8)]),
+          child: Container(margin: const EdgeInsets.all(12), decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withOpacity(.10), const Color(0xFF061329).withOpacity(.45)]), border: Border.all(color: cyan.withOpacity(.72), width: 1.4)),
+            child: Container(margin: const EdgeInsets.all(10), decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF071226).withOpacity(.8), border: Border.all(color: cyan.withOpacity(.30))),
               child: Icon(_listening ? Icons.graphic_eq_rounded : _speaking ? Icons.volume_up_rounded : _thinking ? Icons.bubble_chart_rounded : Icons.auto_awesome, size: 49, color: cyan)))));
       }))),
       Text(_status, style: const TextStyle(color: cyan, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w700)),
@@ -385,8 +413,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       const SizedBox(height: 10),
       Expanded(child: Container(
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        decoration: BoxDecoration(color: panel.withOpacity(.72), borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white.withOpacity(.06))),
-        child: ListView.builder(controller: _scroll, padding: const EdgeInsets.all(13), reverse: true, itemCount: _messages.length,
+        child: _glass(padding: const EdgeInsets.all(13), borderRadius: BorderRadius.circular(24), tint: const Color(0x7A07142A), child: ListView.builder(controller: _scroll, padding: EdgeInsets.zero, reverse: true, itemCount: _messages.length,
           itemBuilder: (_, index) {
             final item = _messages[_messages.length - 1 - index];
             return Align(alignment: item.user ? Alignment.centerRight : Alignment.centerLeft, child: Container(
@@ -407,16 +434,13 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
               ]),
             ));
           },
-        ),
+        )),
       )),
       Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Row(children: [
-        Expanded(child: Container(
-          decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(28), border: Border.all(color: cyan.withOpacity(.20))),
-          child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), maxLines: 3, minLines: 1,
-            style: const TextStyle(fontSize: 14),
-            decoration: const InputDecoration(hintText: 'Message Seri...', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
-          ),
-        )),
+        Expanded(child: _glass(padding: EdgeInsets.zero, borderRadius: BorderRadius.circular(28), tint: const Color(0xC0081429), child: TextField(controller: _input, textInputAction: TextInputAction.send, onSubmitted: (_) => _send(), maxLines: 3, minLines: 1,
+          style: const TextStyle(fontSize: 14),
+          decoration: const InputDecoration(hintText: 'Message Seri...', hintStyle: TextStyle(color: Colors.white38), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 17, vertical: 13)),
+        ))),
         const SizedBox(width: 8),
         IconButton.filled(tooltip: 'Send message', onPressed: _thinking ? null : () => _send(), style: IconButton.styleFrom(backgroundColor: const Color(0xFF123444), foregroundColor: cyan), icon: const Icon(Icons.arrow_upward_rounded)),
         const SizedBox(width: 4),
@@ -426,5 +450,6 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       ])),
       Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('VOICE  •  AI CHAT  •  SMART ACTIONS', style: TextStyle(color: Colors.white.withOpacity(.28), fontSize: 8, letterSpacing: 2))),
     ])),
+    ]),
   );
 }
