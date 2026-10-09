@@ -37,11 +37,6 @@ jobs:
           mkdir -p android/app/src/main/kotlin/com/seriassistant/seri
           cp native/android/app/src/main/kotlin/com/seriassistant/seri/MainActivity.kt android/app/src/main/kotlin/com/seriassistant/seri/MainActivity.kt
           cp native/android/app/src/main/kotlin/com/seriassistant/seri/SeriWakeService.kt android/app/src/main/kotlin/com/seriassistant/seri/SeriWakeService.kt
-          cp native/android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionService.kt android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionService.kt
-          cp native/android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionSessionService.kt android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionSessionService.kt
-          cp native/android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionSession.kt android/app/src/main/kotlin/com/seriassistant/seri/SeriVoiceInteractionSession.kt
-          mkdir -p android/app/src/main/res/xml
-          cp native/android/app/src/main/res/xml/seri_voice_interaction.xml android/app/src/main/res/xml/seri_voice_interaction.xml
       - name: Add Android permissions
         run: |
           python3 - <<'PY'
@@ -63,15 +58,9 @@ jobs:
               if name not in s:
                   i = s.find('>', s.find('<manifest'))
                   s = s[:i+1] + '\n' + permission + s[i+1:]
-          services = [
-              '        <service android:name=".SeriWakeService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false" />',
-              '        <service android:name=".SeriVoiceInteractionService" android:label="Seri AI" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true"><intent-filter><action android:name="android.service.voice.VoiceInteractionService" /></intent-filter><meta-data android:name="android.voice_interaction" android:resource="@xml/seri_voice_interaction" /></service>',
-              '        <service android:name=".SeriVoiceInteractionSessionService" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true" />',
-          ]
-          for service in services:
-              name = service.split('android:name="', 1)[1].split('"', 1)[0]
-              if name not in s:
-                  s = s.replace('</application>', service + '\\n    </application>')
+          service = '        <service android:name=".SeriWakeService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false" />'
+          if 'android:name=".SeriWakeService"' not in s:
+              s = s.replace('</application>', service + '\n    </application>')
           p.write_text(s)
           PY
       - name: Install dependencies
