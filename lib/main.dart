@@ -98,8 +98,10 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_wakeWordMode) return;
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      // Do not attempt to create/restart a microphone foreground service after
+      // Android has moved the app to the background. Android 12+ may reject it.
+      // The wake service must be started while Seri is visible and then left running.
       if (_listening) _speech.stop();
-      _startWakeService();
     }
   }
 
@@ -124,6 +126,24 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open assistant settings: ${e.message ?? 'Unknown error'}')));
     } on MissingPluginException {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Install the latest Android build to enable default assistant setup.')));
+    }
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    try {
+      await _alwaysOnChannel.invokeMethod<void>('requestBatteryExemption');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('If Android shows a battery-optimization prompt, choose Allow. This helps but cannot override microphone restrictions.'),
+        duration: Duration(seconds: 5),
+      ));
+    } on PlatformException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Could not open battery settings: ${e.message ?? 'Unknown error'}'),
+      ));
+    } on MissingPluginException {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Install the latest Seri Android build to use battery settings.'),
+      ));
     }
   }
 
@@ -383,6 +403,21 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         const Text('Connect your own AI chat backend. Never put secret provider API keys inside the app.', style: TextStyle(color: Colors.white60, height: 1.4)),
         const SizedBox(height: 16),
         SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          onPressed: _requestBatteryExemption,
+          icon: const Icon(Icons.battery_saver_rounded),
+          label: const Text('ALLOW BACKGROUND BATTERY USE'),
+        )),
+        const Padding(
+          padding: EdgeInsets.only(top: 5, bottom: 10),
+          child: Text('Allow battery use if Android asks. Also set Seri battery use to Unrestricted in App info if your phone offers it.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+        ),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          onPressed: () => _openDeviceSettings('app'),
+          icon: const Icon(Icons.app_settings_alt_rounded),
+          label: const Text('OPEN SERI APP PERMISSIONS'),
+        )),
+        const SizedBox(height: 8),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
           onPressed: _requestDefaultAssistant,
           icon: const Icon(Icons.assistant_rounded),
           label: const Text('SET SERI AS DEFAULT ASSISTANT'),
@@ -393,7 +428,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         ),
         TextField(controller: controller, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI chat endpoint', hintText: 'https://your-server.example.com/chat', border: OutlineInputBorder())),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Speak replies aloud'), value: voice, activeThumbColor: cyan, onChanged: (v) => modalSet(() => voice = v)),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Keeps a foreground notification and restarts listening. Android battery rules may still interrupt it.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeThumbColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
+        SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Always-on “Hey Seri”'), subtitle: const Text('Starts while Seri is open and keeps a foreground notification. Android/OEM microphone policies may still stop it; this cannot be bypassed by an app.', style: TextStyle(color: Colors.white54, fontSize: 11)), value: wakeWord, activeThumbColor: cyan, onChanged: (v) => modalSet(() => wakeWord = v)),
         const SizedBox(height: 10),
         SizedBox(width: double.infinity, child: FilledButton(onPressed: () async {
           final wasWakeEnabled = _wakeWordMode;
