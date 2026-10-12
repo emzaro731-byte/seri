@@ -91,6 +91,8 @@ jobs:
         run: flutter analyze
       - name: Build release APK
         run: flutter build apk --release --dart-define=SERI_BUILD_NUMBER=${{ github.run_number }}
+      - name: Prepare updater APK filename
+        run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/seri-latest.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -108,5 +110,5 @@ jobs:
             Build number: ${{ github.run_number }}
 
             Download seri-latest.apk and install it on your Android device. Android will ask you to confirm installation.
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/seri-latest.apk
           make_latest: true
