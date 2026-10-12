@@ -74,6 +74,9 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
     _messages.add(ChatItem('Systems online. I’m Seri, your personal assistant. Ask me a question or try one of the quick actions below.', false));
     _loadSettings();
     _setupVoice();
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (mounted) _checkForUpdates(showUpToDate: false);
+    });
   }
 
   static const int _buildNumber = int.fromEnvironment('SERI_BUILD_NUMBER', defaultValue: 1);
@@ -923,7 +926,7 @@ class _AssistantHomeState extends State<AssistantHome> with TickerProviderStateM
         ],
       ));
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not check updates. Try again when you are online.')));
+      if (mounted && showUpToDate) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not check updates. Try again when you are online.')));
     }
   }
 
