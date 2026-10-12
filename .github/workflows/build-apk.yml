@@ -12,7 +12,7 @@ on:
       - '.github/workflows/build-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -90,10 +90,23 @@ jobs:
       - name: Analyze
         run: flutter analyze
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=SERI_BUILD_NUMBER=${{ github.run_number }}
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: seri-android-release
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Publish latest APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Seri Android build ${{ github.run_number }}
+          body: |
+            Automated Seri Android build.
+            Build number: ${{ github.run_number }}
+
+            Download seri-latest.apk and install it on your Android device. Android will ask you to confirm installation.
+          files: build/app/outputs/flutter-apk/app-release.apk
+          make_latest: true
